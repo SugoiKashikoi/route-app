@@ -89,7 +89,7 @@ h2 .link { order: 3; background: none; border: 0; color: var(--accent2); font-fa
   background: var(--card2); border: 1px solid var(--line2); border-radius: 6px;
 }
 .plate.p-start { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 12px rgba(47,140,255,.5); }
-.plate.p-goal { background: repeating-conic-gradient(#fff 0 25%, #222 0 50%) 0 0 / 10px 10px; color: #000; text-shadow: 0 0 3px #fff, 0 0 3px #fff; }
+.plate.p-goal { background: var(--red); border-color: var(--red); box-shadow: 0 0 12px rgba(255,59,78,.55); }
 .plate.sm { width: 22px; height: 22px; font-size: 12px; margin: 0; }
 .stop-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .place-input { position: relative; }
