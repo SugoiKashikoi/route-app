@@ -1,6 +1,6 @@
 import type { LatLng, Mode } from "../types";
 
-const TRAVEL: Record<Mode, string> = { DRIVE: "driving", WALK: "walking", BICYCLE: "bicycling", TRANSIT: "transit" };
+const TRAVEL: Record<Mode, string> = { DRIVE: "driving", WALK: "walking", BICYCLE: "bicycling", TRANSIT: "transit", FIXED: "transit" };
 const pt = (p: LatLng) => `${p.lat},${p.lng}`;
 
 /** 区間をGoogleマップで開く。経路そのものの完全一致は保証されない(Googleが再計算する)。 */

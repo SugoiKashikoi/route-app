@@ -1,10 +1,12 @@
-export type Mode = "DRIVE" | "WALK" | "BICYCLE" | "TRANSIT";
+/** FIXED は新幹線・飛行機など発着時刻が決まっている区間(APIを使わず、入力した時刻で計算) */
+export type Mode = "DRIVE" | "WALK" | "BICYCLE" | "TRANSIT" | "FIXED";
 
 export const MODE_LABEL: Record<Mode, string> = {
   DRIVE: "自動車",
   WALK: "徒歩",
   BICYCLE: "自転車",
   TRANSIT: "公共交通",
+  FIXED: "新幹線・飛行機",
 };
 
 export interface Stop {
@@ -19,6 +21,12 @@ export interface Stop {
   departAt?: string;
   /** この地点に着きたい時刻 "HH:MM" */
   arriveBy?: string;
+  /** modeToNext が FIXED のときの便名(例: のぞみ12号) */
+  fixedName?: string;
+  /** modeToNext が FIXED のときの発車・出発時刻 "HH:MM" */
+  fixedDepart?: string;
+  /** modeToNext が FIXED のときの到着時刻 "HH:MM" */
+  fixedArrive?: string;
 }
 
 export interface LatLng {
@@ -27,5 +35,6 @@ export interface LatLng {
 }
 
 export type LegResult =
-  | { ok: true; mode: Mode; distanceMeters: number; durationSec: number; path: LatLng[]; start: LatLng; end: LatLng }
+  // FIXED は両端の座標が前後の区間から分かったときだけ start/end が入る
+  | { ok: true; mode: Mode; distanceMeters: number; durationSec: number; path: LatLng[]; start?: LatLng; end?: LatLng }
   | { ok: false; mode: Mode; error: string };

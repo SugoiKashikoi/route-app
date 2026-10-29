@@ -1,6 +1,10 @@
+import type { LegResult, Mode, Stop } from "../types";
 import { describe, expect, it } from "vitest";
 import { formatClock, formatDuration, formatDistance, toLocalInput } from "./format";
-import { forwardSchedule, resolveClock, startForArrival, type StopRule } from "./schedule";
+import { buildRules, forwardSchedule, resolveClock, startForArrival, type StopRule } from "./schedule";
+import { fillFixedEnds, fixedLeg } from "./routes";
+import { fuelCost } from "./cost";
+import { legCautions } from "./cautions";
 import { decodeFavorite, encodeFavorite, toFavorite } from "./favorites";
 
 describe("favorites", () => {
@@ -123,5 +127,52 @@ describe("schedule", () => {
   it("日付またぎは「翌」", () => {
     expect(formatClock(new Date(2026, 9, 30, 0, 15), start)).toBe("翌 0:15");
     expect(toLocalInput(start)).toBe("2026-10-29T09:00");
+  });
+});
+
+describe("新幹線・飛行機(時刻固定)", () => {
+  const st = (o: Partial<Stop>): Stop => ({ id: "x", text: "駅", modeToNext: "FIXED", ...o });
+  it("所要は着−発。日付またぎは翌日扱い、未入力は失敗", () => {
+    expect(fixedLeg(st({ fixedDepart: "10:00", fixedArrive: "12:30" }))).toMatchObject({ ok: true, durationSec: 150 * 60 });
+    expect(fixedLeg(st({ fixedDepart: "23:30", fixedArrive: "0:45" }))).toMatchObject({ ok: true, durationSec: 75 * 60 });
+    expect(fixedLeg(st({ fixedDepart: "10:00" })).ok).toBe(false);
+  });
+  it("両端の座標を前後の区間から補う", () => {
+    const a = { lat: 1, lng: 1 };
+    const b = { lat: 2, lng: 2 };
+    const legs = fillFixedEnds([
+      { ok: true, mode: "DRIVE", distanceMeters: 1, durationSec: 1, path: [], start: { lat: 0, lng: 0 }, end: a },
+      { ok: true, mode: "FIXED", distanceMeters: 0, durationSec: 1, path: [] },
+      { ok: true, mode: "WALK", distanceMeters: 1, durationSec: 1, path: [], start: b, end: b },
+    ]);
+    expect(legs[1]).toMatchObject({ start: a, end: b, path: [a, b] });
+  });
+  it("発車時刻まで待ち、発車に間に合うかを判定する", () => {
+    const base = new Date(2026, 0, 1, 8, 0);
+    const stops = [
+      st({ modeToNext: "DRIVE" }),
+      st({ dwellMin: 10, fixedDepart: "9:00", fixedArrive: "11:00" }),
+      st({ modeToNext: "WALK" }),
+    ];
+    const rules = buildRules(stops, base);
+    // 車30分で8:30着、滞在10分 → 9:00発まで20分待ち、余裕20分
+    const t = forwardSchedule([30 * 60, 120 * 60], rules, base);
+    expect(t[1]).toMatchObject({ waitMin: 20, slackMin: 20 });
+    expect(t[2].arrive?.getHours()).toBe(11);
+  });
+});
+
+describe("ガソリン代・要注意", () => {
+  it("距離÷燃費×単価、未設定はnull", () => {
+    expect(fuelCost(150_000, { kmPerL: 15, yenPerL: 170 })).toBe(1700);
+    expect(fuelCost(150_000, {})).toBeNull();
+  });
+  it("乗り継ぎが厳しい・長い徒歩・長時間運転を指摘", () => {
+    const leg = (mode: Mode, min: number): LegResult => ({ ok: true, mode, distanceMeters: 0, durationSec: min * 60, path: [] });
+    expect(legCautions(leg("DRIVE", 30), 12, true)).toEqual(["発車まで余裕12分(乗り遅れ注意)"]);
+    expect(legCautions(leg("DRIVE", 30), 12, false)).toEqual([]);
+    expect(legCautions(leg("DRIVE", 30), -5, true)).toEqual(["発車に5分間に合いません"]);
+    expect(legCautions(leg("WALK", 25), undefined, false)).toHaveLength(1);
+    expect(legCautions(leg("DRIVE", 130), undefined, false)).toHaveLength(1);
   });
 });

@@ -5,7 +5,9 @@ import { DateTimeField, TimeField } from "./TimeFields";
 import { formatClock, formatDistance, formatDuration, toLocalInput } from "./lib/format";
 import { legUrl, navigateFromHereUrl } from "./lib/mapsLinks";
 import { searchAll, searchFrom } from "./lib/routes";
-import { forwardSchedule, resolveClock, startForArrival, type StopRule, type StopTime } from "./lib/schedule";
+import { buildRules, forwardSchedule, startForArrival, type StopTime } from "./lib/schedule";
+import { fuelCost, formatYen, loadCar, saveCar, type CarSettings } from "./lib/cost";
+import { legCautions } from "./lib/cautions";
 import { decodeFavorite, encodeFavorite, loadFavorites, saveFavorites, toFavorite, type Favorite } from "./lib/favorites";
 import { MODE_LABEL, type LegResult, type Mode, type Stop } from "./types";
 
@@ -14,7 +16,7 @@ const MIN_STOPS = 2;
 const STORAGE_KEY = "multimodal-route:stops";
 const API_KEY_STORAGE = "multimodal-route:apikey";
 const MODES = Object.keys(MODE_LABEL) as Mode[];
-const MODE_ICON: Record<Mode, string> = { DRIVE: "🚗", WALK: "🚶", BICYCLE: "🚲", TRANSIT: "🚆" };
+const MODE_ICON: Record<Mode, string> = { DRIVE: "🚗", WALK: "🚶", BICYCLE: "🚲", TRANSIT: "🚆", FIXED: "🚄" };
 
 function loadApiKey(): string {
   try {
@@ -59,12 +61,32 @@ function samplePreset(): Stop[] {
 
 const fromFavorite = (f: Favorite): Stop[] => f.stops.map((x) => ({ ...newStop(x.modeToNext), ...x }));
 
-/** URLの #fav=… からお気に入りを取り込む(取り込んだらハッシュは消す) */
-function importFromHash(): Favorite | null {
-  const m = location.hash.match(/^#fav=(.+)$/);
+/**
+ * URLのハッシュからルートを取り込む(取り込んだらハッシュは消す)。
+ * #fav=…  共有リンク(お気に入りに追加)
+ * #plan=… 人やAIが手で書けるJSON(encodeURIComponent)。例: #plan={"stops":[{"text":"上野駅","modeToNext":"WALK"},{"text":"東京駅"}]}
+ */
+function importFromHash(): { fav: Favorite; save: boolean } | null {
+  const m = location.hash.match(/^#(fav|plan)=(.+)$/);
   if (!m) return null;
   history.replaceState(null, "", location.pathname + location.search);
-  return decodeFavorite(m[1]);
+  if (m[1] === "fav") {
+    const f = decodeFavorite(m[2]);
+    return f && { fav: f, save: true };
+  }
+  try {
+    const v = JSON.parse(decodeURIComponent(m[2]));
+    const stops = (Array.isArray(v) ? v : v?.stops) as Partial<Stop>[] | undefined;
+    if (!Array.isArray(stops) || stops.length < MIN_STOPS) return null;
+    const ok = stops.slice(0, MAX_STOPS).map((x) => ({
+      ...x,
+      text: String(x.text ?? ""),
+      modeToNext: MODES.includes(x.modeToNext as Mode) ? (x.modeToNext as Mode) : "DRIVE",
+    }));
+    return { fav: { id: crypto.randomUUID(), name: String(v?.name ?? ""), stops: ok }, save: false };
+  } catch {
+    return null;
+  }
 }
 
 /** 余裕・遅れ・待ちの表示 */
@@ -91,6 +113,12 @@ export function App() {
   /** ナビ進行中の区間(0始まり)。降車・到着のたびに次へ進める */
   const [step, setStep] = useState(0);
   const [apiKey, setApiKey] = useState(loadApiKey);
+  const [car, setCar] = useState<CarSettings>(loadCar);
+  const updateCar = (patch: CarSettings) => {
+    const c = { ...car, ...patch };
+    setCar(c);
+    saveCar(c);
+  };
   const [timeMode, setTimeMode] = useState<TimeMode>("now");
   const [timeValue, setTimeValue] = useState(defaultTime);
   const [schedule, setSchedule] = useState<StopTime[]>([]);
@@ -121,8 +149,10 @@ export function App() {
 
   // 共有リンクで開かれたら、お気に入りに追加して読み込む
   useEffect(() => {
-    const f = importFromHash();
-    if (!f) return;
+    const got = importFromHash();
+    if (!got) return;
+    const f = got.fav;
+    if (!got.save) return setStops(fromFavorite(f));
     const cur = loadFavorites();
     const rest = cur.filter((x) => x.name !== f.name);
     setFavsSaved([...rest, f]);
@@ -187,11 +217,7 @@ export function App() {
     const valid = target && !Number.isNaN(target.getTime());
     // 地点ごとの "HH:MM" は、旅程の日付(指定時刻か現在)を基準に日時へ直す
     const base = valid ? target : now;
-    const rules: StopRule[] = stops.map((s, i) => ({
-      dwellMin: s.dwellMin ?? 0,
-      departAt: i > 0 && i < stops.length - 1 ? resolveClock(s.departAt, base) : undefined,
-      arriveBy: i > 0 ? resolveClock(s.arriveBy, base) : undefined,
-    }));
+    const rules = buildRules(stops, base);
     let res: LegResult[];
     let start = now;
     let msg = "";
@@ -236,6 +262,10 @@ export function App() {
     const ls = okLegs.filter((l) => l.mode === m);
     return { m, sec: ls.reduce((a, l) => a + l.durationSec, 0), meters: ls.reduce((a, l) => a + l.distanceMeters, 0) };
   }).filter((x) => x.sec > 0);
+  const driveM = okLegs.filter((l) => l.mode === "DRIVE").reduce((a, l) => a + l.distanceMeters, 0);
+  const fuel = driveM > 0 ? fuelCost(driveM, car) : null;
+  const cautions = legs.map((l, i) => legCautions(l, schedule[i + 1]?.slackMin, stops[i + 1]?.modeToNext === "FIXED" && i + 1 < stops.length - 1));
+  const cautionCount = cautions.filter((c) => c.length > 0).length;
   const startAt = schedule[0]?.depart;
   const endAt = schedule.at(-1)?.arrive;
   const clock = (d?: Date) => (d ? formatClock(d, startAt) : "--:--");
@@ -251,11 +281,11 @@ export function App() {
           </div>
         </div>
         <div className="top-actions">
-          <button className={`ghost ${drawer === "fav" ? "on" : ""}`} onClick={() => setDrawer(drawer === "fav" ? "" : "fav")}>
+          <button aria-label="お気に入り" className={`ghost ${drawer === "fav" ? "on" : ""}`} onClick={() => setDrawer(drawer === "fav" ? "" : "fav")}>
             ★<span className="lbl"> お気に入り</span><span className="count">{favs.length}</span>
           </button>
-          <button className={`ghost ${drawer === "key" ? "on" : ""} ${apiKey ? "" : "alert"}`} onClick={() => setDrawer(drawer === "key" ? "" : "key")}>
-            ⚙<span className="lbl"> {apiKey ? "APIキー" : "APIキー未設定"}</span>
+          <button aria-label="設定(APIキー・燃費)" className={`ghost ${drawer === "key" ? "on" : ""} ${apiKey ? "" : "alert"}`} onClick={() => setDrawer(drawer === "key" ? "" : "key")}>
+            ⚙<span className="lbl"> {apiKey ? "設定" : "APIキー未設定"}</span>
           </button>
         </div>
       </header>
@@ -279,6 +309,20 @@ export function App() {
             <p className="note">
               このブラウザの中にだけ保存され、Google以外へは送信されません。キーはRoutes API・Places API (New)・Maps JavaScript APIに制限し、HTTPリファラ制限でこのサイトのURLだけを許可してください。
             </p>
+            <h2>CAR</h2>
+            <div className="stop-opts">
+              <label className="mini">
+                燃費
+                <input type="number" inputMode="decimal" min={0} step={0.1} aria-label="燃費(km/L)" value={car.kmPerL ?? ""} onChange={(e) => updateCar({ kmPerL: Number(e.target.value) || undefined })} />
+                km/L
+              </label>
+              <label className="mini">
+                ガソリン
+                <input type="number" inputMode="numeric" min={0} step={1} aria-label="ガソリン単価(円/L)" value={car.yenPerL ?? ""} onChange={(e) => updateCar({ yenPerL: Number(e.target.value) || undefined })} />
+                円/L
+              </label>
+            </div>
+            <p className="note">入力すると、車の区間のガソリン代の目安を表示します(距離÷燃費×単価。高速代は含みません)。</p>
           </section>
         )}
 
@@ -345,6 +389,7 @@ export function App() {
                         apiKey={apiKey}
                         value={s.text}
                         placeholder={first ? "出発地" : last ? "目的地" : "経由地"}
+                        label={`地点${label(i)} ${first ? "出発地" : last ? "目的地" : "経由地"}`}
                         onChange={(text, placeId) => update(i, { text, placeId })}
                       />
                       {!first && (
@@ -398,7 +443,9 @@ export function App() {
                         {MODES.map((m) => (
                           <button
                             key={m}
-                            className={s.modeToNext === m ? "on" : ""}
+                            className={`${s.modeToNext === m ? "on" : ""} ${m === "FIXED" ? "fixed" : ""}`}
+                            aria-pressed={s.modeToNext === m}
+                            aria-label={`${label(i)}→${label(i + 1)}の移動手段: ${MODE_LABEL[m]}`}
                             style={{ ["--mc" as string]: MODE_COLOR[m] }}
                             title={MODE_LABEL[m]}
                             onClick={() => update(i, { modeToNext: m })}
@@ -408,6 +455,25 @@ export function App() {
                           </button>
                         ))}
                       </div>
+                    </div>
+                  )}
+                  {!last && s.modeToNext === "FIXED" && (
+                    <div className="stop-opts fixed-opts">
+                      <input
+                        className="fixed-name"
+                        placeholder="便名(任意) 例: のぞみ12号"
+                        aria-label={`${label(i)}→${label(i + 1)}の便名`}
+                        value={s.fixedName ?? ""}
+                        onChange={(e) => update(i, { fixedName: e.target.value || undefined })}
+                      />
+                      <label className="mini">
+                        発
+                        <TimeField optional value={s.fixedDepart ?? ""} onChange={(v) => update(i, { fixedDepart: v || undefined })} />
+                      </label>
+                      <label className="mini">
+                        着
+                        <TimeField optional value={s.fixedArrive ?? ""} onChange={(v) => update(i, { fixedArrive: v || undefined })} />
+                      </label>
                     </div>
                   )}
                 </li>
@@ -458,7 +524,7 @@ export function App() {
                     <span className="dot" style={{ background: MODE_COLOR[x.m] }} />
                     <span className="by-mode-name">{MODE_ICON[x.m]} {MODE_LABEL[x.m]}</span>
                     <span className="mono">{formatDuration(x.sec)}</span>
-                    <span className="by-mode-dist">{formatDistance(x.meters)}</span>
+                    <span className="by-mode-dist">{x.m === "FIXED" ? "—" : formatDistance(x.meters)}</span>
                   </li>
                 ))}
               </ul>
@@ -471,7 +537,12 @@ export function App() {
                   <b>{startAt && endAt ? formatDuration((endAt.getTime() - startAt.getTime()) / 1000) : "--"}</b>
                 </div>
               </div>
-              <div className="hud-badges"><Badges t={schedule.at(-1)} /></div>
+              <div className="hud-badges">
+                <Badges t={schedule.at(-1)} />
+                {fuel !== null && <span className="chip">⛽ ガソリン代 約{formatYen(fuel)}</span>}
+                {cautionCount > 0 && <span className="chip bad">⚠ 要注意 {cautionCount}区間</span>}
+              </div>
+              {driveM > 0 && fuel === null && <div className="info">⚙ 設定で燃費とガソリン単価を入れると、ガソリン代の目安を表示します。</div>}
               {failed > 0 && <div className="warn">{failed}区間が取得できなかったため、合計は取得できた区間のみの値です。</div>}
               {notice && <div className="info">{notice}</div>}
             </div>
@@ -494,13 +565,13 @@ export function App() {
                     </li>
                   )}
                   <li
-                    className={`sector ${i === step ? "current" : i < step ? "done" : ""} ${focus === i ? "focus" : ""}`}
+                    className={`sector ${i === step ? "current" : i < step ? "done" : ""} ${focus === i ? "focus" : ""} ${cautions[i].length ? "caution" : ""}`}
                     style={{ ["--mc" as string]: MODE_COLOR[l.mode] }}
                   >
                     <div className="sector-head" role="button" tabIndex={0} title="地図でこの区間を表示" onClick={() => showLeg(i)}>
                       <span className="sector-no">S{i + 1}</span>
                       <span>{label(i)} → {label(i + 1)}</span>
-                      <span className="mode-tag">{MODE_ICON[l.mode]} {MODE_LABEL[l.mode]}</span>
+                      <span className="mode-tag">{MODE_ICON[l.mode]} {(l.mode === "FIXED" && stops[i]?.fixedName) || MODE_LABEL[l.mode]}</span>
                       {i === step && <span className="live">NOW</span>}
                       {i < step && <span className="live off">DONE</span>}
                     </div>
@@ -509,16 +580,26 @@ export function App() {
                         <div className="sector-time">{formatDuration(l.durationSec)}</div>
                         <div className="sector-meta">
                           <span className="mono">{clock(schedule[i]?.depart)} → {clock(schedule[i + 1]?.arrive)}</span>
-                          <span>{formatDistance(l.distanceMeters)}</span>
-                          <a href={legUrl(l.start, l.end, l.mode)} target="_blank" rel="noreferrer">Googleマップ</a>
+                          {l.mode !== "FIXED" && <span>{formatDistance(l.distanceMeters)}</span>}
+                          {l.mode === "DRIVE" && fuel !== null && <span>⛽ 約{formatYen(fuelCost(l.distanceMeters, car)!)}</span>}
+                          {l.mode !== "FIXED" && l.start && l.end && (
+                            <a href={legUrl(l.start, l.end, l.mode)} target="_blank" rel="noreferrer">Googleマップ</a>
+                          )}
                         </div>
                       </div>
                     ) : (
                       <div className="err">{l.error}</div>
                     )}
+                    {cautions[i].length > 0 && (
+                      <ul className="cautions">
+                        {cautions[i].map((c) => (
+                          <li key={c}>⚠ {c}</li>
+                        ))}
+                      </ul>
+                    )}
                     {i === step && (
                       <div className="step-actions">
-                        {l.ok && (
+                        {l.ok && l.mode !== "FIXED" && l.end && (
                           <a className="go" href={navigateFromHereUrl(l.end, l.mode)} target="_blank" rel="noreferrer">
                             {l.mode === "DRIVE" ? "車ナビ開始(CarPlay対応)" : `${MODE_LABEL[l.mode]}で${label(i + 1)}へ出発`}
                           </a>

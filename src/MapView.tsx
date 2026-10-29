@@ -6,6 +6,7 @@ export const MODE_COLOR: Record<Mode, string> = {
   WALK: "#e8710a",
   BICYCLE: "#188038",
   TRANSIT: "#9334e6",
+  FIXED: "#00a6a6",
 };
 
 let loader: Promise<void> | undefined;
@@ -92,15 +93,18 @@ export function MapView({ apiKey, legs, visible, focus }: Props) {
         bounds.extend(q);
         return;
       }
+      // 新幹線・飛行機は経路が分からないので、両端を結ぶ破線(大圏)で示す
+      const dashed = l.mode === "WALK" || l.mode === "FIXED";
       const line = new google.maps.Polyline({
         path: l.path,
+        geodesic: l.mode === "FIXED",
         strokeColor: MODE_COLOR[l.mode],
-        strokeOpacity: l.mode === "WALK" ? 0 : dim(i) ? 0.25 : 0.9,
+        strokeOpacity: dashed ? 0 : dim(i) ? 0.25 : 0.9,
         strokeWeight: focus === i ? 8 : 6,
         zIndex: focus === i ? 10 : 1,
         icons:
-          l.mode === "WALK"
-            ? [{ icon: { path: "M 0,-1 0,1", strokeOpacity: dim(i) ? 0.3 : 1, scale: 3, strokeColor: MODE_COLOR.WALK }, offset: "0", repeat: "12px" }]
+          dashed
+            ? [{ icon: { path: "M 0,-1 0,1", strokeOpacity: dim(i) ? 0.3 : 1, scale: 3, strokeColor: MODE_COLOR[l.mode] }, offset: "0", repeat: l.mode === "FIXED" ? "18px" : "12px" }]
             : undefined,
         map: m,
       });

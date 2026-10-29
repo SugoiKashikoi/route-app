@@ -9,10 +9,12 @@ interface Props {
   apiKey: string;
   value: string;
   placeholder: string;
+  /** 読み上げ・自動操作用の名前(例: 地点A 出発地) */
+  label?: string;
   onChange: (text: string, placeId?: string) => void;
 }
 
-export function PlaceInput({ apiKey, value, placeholder, onChange }: Props) {
+export function PlaceInput({ apiKey, value, placeholder, label, onChange }: Props) {
   const [items, setItems] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
   const timer = useRef<number>();
@@ -54,6 +56,7 @@ export function PlaceInput({ apiKey, value, placeholder, onChange }: Props) {
       <input
         value={value}
         placeholder={placeholder}
+        aria-label={label ?? placeholder}
         onChange={(e) => {
           setOpen(true);
           onChange(e.target.value, undefined);

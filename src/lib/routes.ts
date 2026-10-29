@@ -62,8 +62,37 @@ export function parseRoutesResponse(mode: Mode, status: number, data: RoutesResp
   };
 }
 
+/** "HH:MM" → 0時からの分 */
+const clockMin = (hhmm?: string) => {
+  const m = hhmm?.match(/^(\d{1,2}):(\d{2})$/);
+  return m ? Number(m[1]) * 60 + Number(m[2]) : undefined;
+};
+
+/** 新幹線・飛行機など時刻が決まっている区間。所要は着−発(日付またぎは翌日扱い)。距離は不明なので0 */
+export function fixedLeg(from: Stop): LegResult {
+  const dep = clockMin(from.fixedDepart);
+  const arr = clockMin(from.fixedArrive);
+  if (dep === undefined || arr === undefined) return { ok: false, mode: "FIXED", error: "発車・到着の時刻を入力してください" };
+  const min = (arr - dep + 1440) % 1440;
+  if (min === 0) return { ok: false, mode: "FIXED", error: "発車と到着が同じ時刻です" };
+  return { ok: true, mode: "FIXED", distanceMeters: 0, durationSec: min * 60, path: [] };
+}
+
+/** 固定区間の両端の座標を、前後の区間の終点・始点から補う(地図に直線で描くため) */
+export function fillFixedEnds(legs: LegResult[]): LegResult[] {
+  return legs.map((l, i) => {
+    if (!l.ok || l.mode !== "FIXED") return l;
+    const prev = legs[i - 1];
+    const next = legs[i + 1];
+    const start = prev?.ok ? prev.end : undefined;
+    const end = next?.ok ? next.start : undefined;
+    return { ...l, start, end, path: start && end ? [start, end] : [] };
+  });
+}
+
 export async function fetchLeg(apiKey: string, from: Stop, to: Stop, departure?: Date): Promise<LegResult> {
   const mode = from.modeToNext;
+  if (mode === "FIXED") return fixedLeg(from);
   if (!apiKey) return { ok: false, mode, error: "APIキーが未設定です(画面上部の設定で入力してください)" };
   const ref = (s: Stop): PlaceRef => (s.placeId ? { placeId: s.placeId } : { address: s.text });
   // 過去・直近の時刻を渡すとAPIがエラーを返すため、その場合は「いま」として省略する
@@ -86,8 +115,8 @@ export async function fetchLeg(apiKey: string, from: Stop, to: Stop, departure?:
 }
 
 /** 全区間を並列取得(1検索 = 区間数ぶんのリクエスト) */
-export function searchAll(apiKey: string, stops: Stop[]): Promise<LegResult[]> {
-  return Promise.all(stops.slice(0, -1).map((s, i) => fetchLeg(apiKey, s, stops[i + 1])));
+export async function searchAll(apiKey: string, stops: Stop[]): Promise<LegResult[]> {
+  return fillFixedEnds(await Promise.all(stops.slice(0, -1).map((s, i) => fetchLeg(apiKey, s, stops[i + 1]))));
 }
 
 /** 出発時刻つきで順番に取得(前の区間の到着+滞在が次の出発時刻になるため並列にできない) */
@@ -99,5 +128,5 @@ export async function searchFrom(apiKey: string, stops: Stop[], start: Date, rul
     out.push(leg);
     t = t === undefined || !leg.ok ? undefined : nextDepart(t + leg.durationSec * 1000, rules[i + 1]);
   }
-  return out;
+  return fillFixedEnds(out);
 }
