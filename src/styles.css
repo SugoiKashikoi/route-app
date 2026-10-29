@@ -333,10 +333,10 @@ h2::after { height: 2px; background: repeating-linear-gradient(90deg, var(--acce
 /* 移動手段ボタン: 選択中はグラデ+白文字 */
 .modes button { border-radius: 999px; font-weight: 600; }
 .modes button.on { background: var(--mc); }
-/* TIMING: 角丸をやめ、STARTと同じ斜めの形にそろえる */
-.seg { border-radius: 4px; overflow: hidden; }
-.seg button { border-radius: 0; }
-.seg button.on { clip-path: polygon(6% 0, 100% 0, 94% 100%, 0 100%); }
+/* TIMING: 外枠も中のボタンもSTARTと同じ斜めの平行四辺形にそろえる(ホバー時も同じ形) */
+.seg { border-radius: 0; border: none; padding: 4px 10px; gap: 2px; clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
+.seg button { border-radius: 0; clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
+.seg button:hover:not(:disabled):not(.on) { background: rgba(255,122,0,.10); }
 .seg button.on { background: var(--grad); }
 
 /* START: 斜めの大ボタンにきらめきが流れる */
