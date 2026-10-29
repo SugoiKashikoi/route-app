@@ -119,9 +119,9 @@ export function MapView({ apiKey, legs, visible, focus }: Props) {
       if (focus !== null && (focus === i || focus + 1 === i)) bounds.extend(p);
       const pin = new google.maps.marker.PinElement({
         glyph: String.fromCharCode(65 + i),
-        background: "#ff8a1f",
-        borderColor: "#ffffff",
-        glyphColor: "#ffffff",
+        background: "#111111",
+        borderColor: "#c9a227",
+        glyphColor: "#f0d36b",
       });
       const marker = new google.maps.marker.AdvancedMarkerElement({ map: m, position: p, content: pin.element });
       overlays.current.push({ setMap: (x) => (marker.map = x) });

@@ -432,3 +432,61 @@ body {
 .start { box-shadow: 0 6px 16px color-mix(in srgb, var(--china) 35%, transparent); }
 .hud::before { background: radial-gradient(circle, color-mix(in srgb, var(--china) 14%, transparent) 4px, transparent 4.5px) 0 0 / 18px 18px; }
 input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--china) 20%, transparent); }
+
+/* ===== 十王星南テーマ: 白と黒のハイコントラストに、一番星のゴールド ===== */
+:root {
+  --bg: #f7f7f5; --bg2: #ececea; --card: #ffffff; --card2: #fbf6e6;
+  --line: #e2e2de; --line2: #c9c9c3; --text: #111111; --sub: #6f6f6a;
+  --gold: #c9a227; --gold2: #f0d36b; --ink: #111111;
+  --accent: var(--gold); --accent2: var(--gold2); --pink: var(--gold);
+  --grad: linear-gradient(100deg, #b8901b 0%, var(--gold2) 50%, #b8901b 100%);
+  --round: "Noto Sans JP", system-ui, sans-serif;
+}
+body {
+  background:
+    radial-gradient(circle, rgba(201,162,39,.35) 1px, transparent 1.5px) 0 0 / 46px 46px,
+    radial-gradient(circle, rgba(17,17,17,.10) 1px, transparent 1.5px) 23px 23px / 46px 46px,
+    var(--bg);
+}
+/* 上部は黒地に金の線 */
+.topbar { background: var(--ink); border-bottom: 3px solid var(--gold); }
+.topbar::after { content: none; }
+.brand-name { background: none; color: #fff; -webkit-background-clip: border-box; background-clip: border-box; letter-spacing: .14em; }
+.brand-sub { color: #b9b9b2; }
+.brand-mark { border-radius: 0; box-shadow: none; background: var(--gold); width: 24px; height: 24px;
+  clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); }
+.topbar .ghost { background: transparent; color: #fff; border-color: #444; }
+.topbar .ghost.on { color: var(--gold2); border-color: var(--gold); }
+.tabs { background: var(--ink); }
+.tabs button { color: #9a9a94; }
+.tabs button.on { color: var(--gold2); box-shadow: inset 0 -3px 0 var(--gold); }
+/* 見出し: 黒いタグに金の番号、細い黒線 */
+h2 .num { background: var(--ink); color: var(--gold2); clip-path: none; border-radius: 2px; }
+h2::after { border-top: 1px solid var(--ink); opacity: .25; }
+/* カード: 角は控えめ、★の飾り */
+.stop, .drawer, .sector, .hud { border-radius: 10px; }
+.stop, .drawer, .sector { box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.drawer::after { content: "★"; color: var(--gold); }
+.plate { background: #fff; border: 1.5px solid var(--ink); color: var(--ink); }
+.plate.p-start { background: var(--ink); color: var(--gold2); border-color: var(--ink); box-shadow: none; }
+.plate.p-goal { background: var(--gold); color: #fff; border-color: var(--gold); box-shadow: none; }
+/* ボタン: 黒地に金 */
+.start { background: var(--ink) !important; color: var(--gold2); box-shadow: 0 6px 16px rgba(0,0,0,.25); }
+.start span::before { content: "★ "; }
+.seg button.on { background: var(--ink); color: var(--gold2); box-shadow: none; }
+.go { background: var(--ink); color: var(--gold2); box-shadow: none; }
+.live { background: var(--gold); color: var(--ink); }
+.link, .note.hi, .sector-meta a, .mini-link, a.chip, .note a, .view a { color: #9a7a12; }
+/* 結果のHUDは黒地に金の数字 */
+.hud { background: var(--ink); border: none; color: #fff; }
+.hud::before { background: radial-gradient(circle, rgba(240,211,107,.25) 1.5px, transparent 2px) 0 0 / 16px 16px; }
+.hud-label { color: var(--gold2); }
+.hud-label::before { background: var(--gold); }
+.hud-time { background: none; -webkit-background-clip: border-box; background-clip: border-box; color: var(--gold2); }
+.hud-grid { border-top-color: #333; }
+.hud-grid small, .by-mode, .hud .info { color: #b9b9b2; }
+.hud-grid b, .by-mode-name, .hud .mono { color: #fff; }
+.hud .chip { background: transparent; color: #eee; border-color: #555; }
+.hud .chip.bad { color: #ff7d8f; border-color: #ff7d8f; }
+.share-plan { background: transparent; color: var(--gold2); border-color: var(--gold); }
+input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(201,162,39,.2); }
