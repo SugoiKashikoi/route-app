@@ -339,12 +339,6 @@ h2::after { height: 2px; background: repeating-linear-gradient(90deg, var(--acce
 /* START: 斜めの大ボタンにきらめきが流れる */
 .start { background: var(--grad) !important; overflow: hidden; }
 .start span { font-weight: 800; letter-spacing: .3em; }
-.start::after {
-  content: ""; position: absolute; top: 0; bottom: 0; left: -40%; width: 30%;
-  background: linear-gradient(100deg, transparent, rgba(255,255,255,.55), transparent);
-  transform: skewX(-20deg); animation: shine 2.8s ease-in-out infinite;
-}
-@keyframes shine { 0%, 55% { left: -40%; } 100% { left: 130%; } }
 
 /* 結果: 合計時間はグラデ文字、区間は順に出てくる */
 .hud-time { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; font-size: 46px; }
@@ -366,5 +360,55 @@ h2::after { height: 2px; background: repeating-linear-gradient(90deg, var(--acce
 .ghost { border-radius: 999px; background: #fff; }
 
 @media (prefers-reduced-motion: reduce) {
-  .start::after, .sectors > li { animation: none; }
+  .sectors > li { animation: none; }
 }
+
+
+/* ===== お嬢様テーマ: クリーム地にピンクとゴールド、まるい形、水玉、リボン ===== */
+:root {
+  --bg: #fff8f1; --bg2: #fdeee6; --card: #ffffff; --card2: #fff1f5;
+  --line: #f6dfe4; --line2: #efc9d2; --text: #4a3a40; --sub: #a08a90;
+  --accent: #ff6f9f; --accent2: #ffa98a; --pink: #ff6f9f; --gold: #e2b04a;
+  --grad: linear-gradient(100deg, #ff8fb3 0%, #ff6f9f 50%, #ffa98a 100%);
+  --round: "M PLUS Rounded 1c", "Noto Sans JP", system-ui, sans-serif;
+}
+body {
+  font-family: var(--round);
+  background:
+    radial-gradient(circle, rgba(255,111,159,.13) 3px, transparent 3.5px) 0 0 / 26px 26px,
+    radial-gradient(circle, rgba(226,176,74,.12) 2px, transparent 2.5px) 13px 13px / 26px 26px,
+    var(--bg);
+}
+/* 斜めカットをやめて、まるく */
+.stop, .drawer, .sector, .hud { clip-path: none; border-radius: 18px; }
+.stop::after, .drawer::after { content: "♡"; width: auto; height: auto; top: 6px; right: 10px; background: none; color: var(--gold); font-size: 12px; }
+.stop, .drawer, .sector { box-shadow: 0 3px 10px rgba(255,111,159,.08); }
+.plate { clip-path: none; border-radius: 50%; width: 32px; height: 32px; }
+.plate.sm { width: 24px; height: 24px; }
+.plate.p-goal { background: linear-gradient(135deg, var(--gold), #f3cf7a); }
+/* 上部: 下端をスカラップ(波形)に */
+.topbar {
+  background: linear-gradient(180deg, #fff, #fff4f7); border-bottom: none; position: relative;
+}
+.topbar::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -8px; height: 8px;
+  background: radial-gradient(circle at 8px 0, #fff4f7 7px, transparent 7.5px) 0 0 / 16px 8px repeat-x;
+  filter: drop-shadow(0 2px 0 var(--line2)); z-index: 1;
+}
+.brand-mark { clip-path: none; border-radius: 50%; width: 26px; height: 26px; background: var(--grad); box-shadow: 0 0 0 3px #fff, 0 0 0 4px var(--gold); }
+.brand-name { font-family: var(--round); font-style: normal; font-weight: 800; letter-spacing: .06em; }
+/* 見出しの番号はリボン */
+h2 { font-family: var(--round); font-style: normal; letter-spacing: .12em; }
+h2 .num { clip-path: polygon(0 0, 100% 0, 88% 50%, 100% 100%, 0 100%, 12% 50%); border-radius: 0; padding: 0 10px; }
+h2::after { height: 0; border-top: 2px dotted var(--accent); background: none; opacity: .5; }
+/* ボタン類はまるく */
+.start { border-radius: 999px; clip-path: none; box-shadow: 0 6px 16px rgba(255,111,159,.35); }
+.start span { font-family: var(--round); font-style: normal; letter-spacing: .2em; }
+.add { border-radius: 999px; border-style: dashed; border-color: var(--line2); }
+.live { clip-path: none; border-radius: 999px; }
+.hud { border-top: none; border: 2px solid var(--line); }
+.hud::before { background: radial-gradient(circle, rgba(255,111,159,.12) 4px, transparent 4.5px) 0 0 / 18px 18px; width: 140px; right: -10px; }
+.hud-time { font-family: var(--round); font-style: normal; }
+.tabs button { font-family: var(--round); font-style: normal; }
+.tabs button.on { background: none; box-shadow: inset 0 -3px 0 var(--accent); }
+.stop::after { content: none; }
