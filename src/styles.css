@@ -290,3 +290,81 @@ h2::after { background: repeating-linear-gradient(90deg, var(--line2) 0 6px, tra
 .note a, .view a { color: var(--accent); }
 .usage { list-style: none; padding: 0; margin: 4px 0 10px; font-size: 12px; } .usage li { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; border-bottom: 1px dashed var(--line); } a.chip { text-decoration: none; color: var(--accent); }
 .mini-link { font-size: 12px; color: var(--accent); align-self: center; }
+
+/* ===== 学マス風 その2: 斜めカット・グラデ文字・ドット地・きらめき ===== */
+:root { --grad: linear-gradient(100deg, #ff7a00 0%, #ff9a3c 45%, #ff5a8a 100%); --cut: 14px; }
+body {
+  background:
+    radial-gradient(circle at 0% 0%, rgba(255,154,60,.16), transparent 40%),
+    radial-gradient(circle at 100% 100%, rgba(255,90,138,.12), transparent 45%),
+    radial-gradient(rgba(34,38,47,.07) 1px, transparent 1.2px) 0 0 / 14px 14px,
+    var(--bg);
+}
+.panel { background: transparent; }
+.brand-name { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.brand-sub { letter-spacing: .08em; }
+
+/* 見出し: 番号は斜めのタグ、英字は大きく */
+h2 { font-size: 15px; font-weight: 800; font-style: italic; letter-spacing: .18em; color: var(--text); }
+h2 .num {
+  display: inline-grid; place-items: center; min-width: 30px; height: 20px; padding: 0 6px;
+  background: var(--grad); color: #fff; font-size: 12px; letter-spacing: .05em;
+  clip-path: polygon(18% 0, 100% 0, 82% 100%, 0 100%);
+}
+h2::after { height: 2px; background: repeating-linear-gradient(90deg, var(--accent) 0 3px, transparent 3px 7px); opacity: .45; }
+
+/* カード: 右上を斜めにカットし、角にオレンジの三角 */
+.stop, .drawer, .sector, .hud {
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, 0 100%);
+  border-radius: 4px;
+}
+.stop, .drawer { position: relative; }
+.stop::after, .drawer::after {
+  content: ""; position: absolute; top: 0; right: 0; width: var(--cut); height: var(--cut);
+  background: linear-gradient(225deg, var(--accent) 50%, transparent 50%);
+}
+.sector { border-radius: 4px; }
+
+/* 地点のプレートは平行四辺形 */
+.plate { border-radius: 2px; clip-path: polygon(16% 0, 100% 0, 84% 100%, 0 100%); width: 34px; border: none; background: var(--bg2); }
+.plate.sm { width: 26px; }
+.plate.p-start { background: var(--grad); }
+
+/* 移動手段ボタン: 選択中はグラデ+白文字 */
+.modes button { border-radius: 999px; font-weight: 600; }
+.modes button.on { background: var(--mc); }
+.seg { border-radius: 999px; overflow: hidden; }
+.seg button.on { background: var(--grad); }
+
+/* START: 斜めの大ボタンにきらめきが流れる */
+.start { background: var(--grad) !important; overflow: hidden; }
+.start span { font-weight: 800; letter-spacing: .3em; }
+.start::after {
+  content: ""; position: absolute; top: 0; bottom: 0; left: -40%; width: 30%;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,.55), transparent);
+  transform: skewX(-20deg); animation: shine 2.8s ease-in-out infinite;
+}
+@keyframes shine { 0%, 55% { left: -40%; } 100% { left: 130%; } }
+
+/* 結果: 合計時間はグラデ文字、区間は順に出てくる */
+.hud-time { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; font-size: 46px; }
+.hud-label { letter-spacing: .3em; }
+.hud-label::before { content: ""; display: inline-block; width: 18px; height: 3px; margin-right: 8px; vertical-align: middle; background: var(--grad); }
+.sectors > li { animation: pop-in .35s ease-out both; }
+.sectors > li:nth-child(2) { animation-delay: .04s; } .sectors > li:nth-child(3) { animation-delay: .08s; }
+.sectors > li:nth-child(4) { animation-delay: .12s; } .sectors > li:nth-child(5) { animation-delay: .16s; }
+.sectors > li:nth-child(n+6) { animation-delay: .2s; }
+@keyframes pop-in { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
+.sector-no { font-weight: 800; }
+.live { clip-path: polygon(10% 0, 100% 0, 90% 100%, 0 100%); border-radius: 0; padding: 1px 10px; background: var(--grad); }
+.chip { border-radius: 999px; font-weight: 600; }
+.go { background: var(--grad); }
+
+/* 上部: 選択中タブに斜めの下線 */
+.tabs button { font-weight: 800; font-style: italic; letter-spacing: .2em; }
+.tabs button.on { box-shadow: none; background: linear-gradient(transparent 85%, var(--accent) 85%); }
+.ghost { border-radius: 999px; background: #fff; }
+
+@media (prefers-reduced-motion: reduce) {
+  .start::after, .sectors > li { animation: none; }
+}
