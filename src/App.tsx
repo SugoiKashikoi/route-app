@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { MapView, MODE_COLOR } from "./MapView";
 import { PlaceInput } from "./PlaceInput";
+import { DateTimeField, TimeField } from "./TimeFields";
 import { formatClock, formatDistance, formatDuration, toLocalInput } from "./lib/format";
 import { legUrl, navigateFromHereUrl } from "./lib/mapsLinks";
 import { searchAll, searchFrom } from "./lib/routes";
@@ -371,13 +372,13 @@ export function App() {
                         <div className="stop-opts">
                           <label className="mini">
                             {label(i)}に
-                            <input type="time" value={s.arriveBy ?? ""} onChange={(e) => update(i, { arriveBy: e.target.value || undefined })} />
+                            <TimeField optional value={s.arriveBy ?? ""} onChange={(v) => update(i, { arriveBy: v || undefined })} />
                             までに着く
                           </label>
                           {!last && (
                             <label className="mini">
                               {label(i)}を
-                              <input type="time" value={s.departAt ?? ""} onChange={(e) => update(i, { departAt: e.target.value || undefined })} />
+                              <TimeField optional value={s.departAt ?? ""} onChange={(v) => update(i, { departAt: v || undefined })} />
                               に出る
                             </label>
                           )}
@@ -432,7 +433,7 @@ export function App() {
             ))}
           </div>
           {timeMode !== "now" && (
-            <input className="dt" type="datetime-local" value={timeValue} onChange={(e) => setTimeValue(e.target.value)} />
+            <DateTimeField value={timeValue} onChange={setTimeValue} />
           )}
         </section>
 

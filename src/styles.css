@@ -118,7 +118,15 @@ h2 .link { order: 3; background: none; border: 0; color: var(--accent2); font-fa
 .seg { display: flex; background: var(--bg2); border: 1px solid var(--line); border-radius: 8px; padding: 3px; gap: 3px; }
 .seg button { flex: 1; border: 0; background: transparent; font-size: 13px; padding: 8px 4px; color: var(--sub); }
 .seg button.on { background: var(--accent); color: #fff; box-shadow: 0 0 14px rgba(47,140,255,.45); }
-.dt { width: 100%; margin-top: 8px; font-family: var(--num); }
+select { background: var(--bg2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 6px; font-family: var(--num); }
+select:focus { border-color: var(--accent); outline: none; }
+.tf { display: inline-flex; align-items: center; gap: 3px; color: var(--sub); }
+.dtf { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.dtf-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.dtf-row button { font-size: 13px; padding: 6px 10px; }
+.dtf-row button.on { border-color: var(--accent); color: var(--accent2); }
+.dtf-row input[type=date] { flex: 1; min-width: 130px; padding: 6px 8px; font-family: var(--num); }
+.dtf-row .tf select { font-size: 16px; padding: 6px 8px; }
 
 /* スタートボタン(GTのメニュー風の斜め) */
 .start {
