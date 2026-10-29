@@ -27,9 +27,11 @@ interface Props {
   apiKey: string;
   legs: LegResult[];
   visible: boolean;
+  /** 強調して表示する区間(null は全体) */
+  focus: number | null;
 }
 
-export function MapView({ apiKey, legs, visible }: Props) {
+export function MapView({ apiKey, legs, visible, focus }: Props) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<google.maps.Map>();
   const overlays = useRef<{ setMap(m: null): void }[]>([]);
@@ -67,26 +69,47 @@ export function MapView({ apiKey, legs, visible }: Props) {
     overlays.current.forEach((o) => o.setMap(null));
     overlays.current = [];
     const bounds = new google.maps.LatLngBounds();
-    const points = legs.flatMap((l) => (l.ok ? [l.start, l.end] : []));
-    legs.forEach((l) => {
-      if (!l.ok) return;
+    // 地点iの位置: 区間iの始点、なければ区間i-1の終点(失敗区間があっても記号がずれないように)
+    const pos = Array.from({ length: legs.length + 1 }, (_, i) => {
+      const a = legs[i];
+      const b = legs[i - 1];
+      return (a?.ok && a.start) || (b?.ok && b.end) || undefined;
+    });
+    const dim = (i: number) => focus !== null && focus !== i;
+    legs.forEach((l, i) => {
+      if (!l.ok) {
+        // 経路が取れなかった区間は、両端が分かれば灰色の点線(直線)でつなぐ。実際の経路ではない
+        const [p, q] = [pos[i], pos[i + 1]];
+        if (!p || !q) return;
+        const line = new google.maps.Polyline({
+          path: [p, q],
+          strokeOpacity: 0,
+          icons: [{ icon: { path: "M 0,-1 0,1", strokeOpacity: dim(i) ? 0.25 : 0.8, scale: 2, strokeColor: "#8a98b0" }, offset: "0", repeat: "10px" }],
+          map: m,
+        });
+        overlays.current.push(line);
+        bounds.extend(p);
+        bounds.extend(q);
+        return;
+      }
       const line = new google.maps.Polyline({
         path: l.path,
         strokeColor: MODE_COLOR[l.mode],
-        strokeOpacity: l.mode === "WALK" ? 0 : 0.9,
-        strokeWeight: 6,
+        strokeOpacity: l.mode === "WALK" ? 0 : dim(i) ? 0.25 : 0.9,
+        strokeWeight: focus === i ? 8 : 6,
+        zIndex: focus === i ? 10 : 1,
         icons:
           l.mode === "WALK"
-            ? [{ icon: { path: "M 0,-1 0,1", strokeOpacity: 1, scale: 3, strokeColor: MODE_COLOR.WALK }, offset: "0", repeat: "12px" }]
+            ? [{ icon: { path: "M 0,-1 0,1", strokeOpacity: dim(i) ? 0.3 : 1, scale: 3, strokeColor: MODE_COLOR.WALK }, offset: "0", repeat: "12px" }]
             : undefined,
         map: m,
       });
       overlays.current.push(line);
-      l.path.forEach((p) => bounds.extend(p));
+      if (focus === null || focus === i) l.path.forEach((p) => bounds.extend(p));
     });
-    // 地点マーカー(A, B, C...)。区間の終点を使い、先頭だけ最初の区間の始点を使う
-    const stopsPts = points.length ? [points[0], ...legs.flatMap((l) => (l.ok ? [l.end] : []))] : [];
-    stopsPts.forEach((p, i) => {
+    pos.forEach((p, i) => {
+      if (!p) return;
+      if (focus !== null && (focus === i || focus + 1 === i)) bounds.extend(p);
       const pin = new google.maps.marker.PinElement({
         glyph: String.fromCharCode(65 + i),
         background: "#2f8cff",
@@ -96,8 +119,8 @@ export function MapView({ apiKey, legs, visible }: Props) {
       const marker = new google.maps.marker.AdvancedMarkerElement({ map: m, position: p, content: pin.element });
       overlays.current.push({ setMap: (x) => (marker.map = x) });
     });
-    if (!bounds.isEmpty()) m.fitBounds(bounds, 48);
-  }, [legs, status]);
+    if (!bounds.isEmpty()) m.fitBounds(bounds, 60);
+  }, [legs, status, focus]);
 
   useEffect(() => {
     if (visible && map.current) google.maps.event.trigger(map.current, "resize");

@@ -100,12 +100,19 @@ export function App() {
   const [drawer, setDrawer] = useState<"" | "key" | "fav">(() => (loadApiKey() ? "" : "key"));
   /** 時刻条件の入力欄を開いている地点 */
   const [timeOpen, setTimeOpen] = useState<Set<string>>(new Set());
+  /** 地図で強調する区間 */
+  const [focus, setFocus] = useState<number | null>(null);
+  const showLeg = (i: number | null) => {
+    setFocus((f) => (f === i ? null : i));
+    if (i !== null && window.matchMedia("(max-width: 760px)").matches) setTab("map");
+  };
 
   const setFavsSaved = (f: Favorite[]) => {
     setFavs(f);
     saveFavorites(f);
   };
   const resetResult = () => {
+    setFocus(null);
     setLegs([]);
     setSchedule([]);
     setStep(0);
@@ -363,14 +370,15 @@ export function App() {
                       {showTime && (
                         <div className="stop-opts">
                           <label className="mini">
-                            着
+                            {label(i)}に
                             <input type="time" value={s.arriveBy ?? ""} onChange={(e) => update(i, { arriveBy: e.target.value || undefined })} />
-                            までに
+                            までに着く
                           </label>
                           {!last && (
                             <label className="mini">
-                              発
+                              {label(i)}を
                               <input type="time" value={s.departAt ?? ""} onChange={(e) => update(i, { departAt: e.target.value || undefined })} />
+                              に出る
                             </label>
                           )}
                         </div>
@@ -467,6 +475,12 @@ export function App() {
               {notice && <div className="info">{notice}</div>}
             </div>
 
+            <div className="sector-bar">
+              <span>区間をタップすると地図でその区間を表示</span>
+              <button className={focus === null ? "on" : ""} onClick={() => { setFocus(null); if (window.matchMedia("(max-width: 760px)").matches) setTab("map"); }}>
+                全体を表示
+              </button>
+            </div>
             <ol className="sectors">
               {legs.map((l, i) => (
                 <Fragment key={i}>
@@ -478,8 +492,11 @@ export function App() {
                       <Badges t={schedule[i]} />
                     </li>
                   )}
-                  <li className={`sector ${i === step ? "current" : i < step ? "done" : ""}`} style={{ ["--mc" as string]: MODE_COLOR[l.mode] }}>
-                    <div className="sector-head">
+                  <li
+                    className={`sector ${i === step ? "current" : i < step ? "done" : ""} ${focus === i ? "focus" : ""}`}
+                    style={{ ["--mc" as string]: MODE_COLOR[l.mode] }}
+                  >
+                    <div className="sector-head" role="button" tabIndex={0} title="地図でこの区間を表示" onClick={() => showLeg(i)}>
                       <span className="sector-no">S{i + 1}</span>
                       <span>{label(i)} → {label(i + 1)}</span>
                       <span className="mode-tag">{MODE_ICON[l.mode]} {MODE_LABEL[l.mode]}</span>
@@ -527,7 +544,7 @@ export function App() {
       </aside>
 
       <main className={`mapcol ${tab === "map" ? "show" : ""}`}>
-        <MapView apiKey={apiKey} legs={legs} visible={tab === "map"} />
+        <MapView apiKey={apiKey} legs={legs} visible={tab === "map"} focus={focus} />
       </main>
     </div>
   );

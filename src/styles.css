@@ -160,6 +160,11 @@ h2 .link { order: 3; background: none; border: 0; color: var(--accent2); font-fa
 .sector { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--mc); border-radius: 8px; padding: 10px 12px; }
 .sector.current { border-color: var(--line2); border-left-color: var(--mc); background: linear-gradient(90deg, color-mix(in srgb, var(--mc) 14%, var(--card)), var(--card)); box-shadow: 0 0 18px color-mix(in srgb, var(--mc) 25%, transparent); }
 .sector.done { opacity: .45; }
+.sector.focus { outline: 2px solid var(--mc); outline-offset: 1px; }
+.sector-head { cursor: pointer; }
+.sector-bar { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 14px; font-size: 11px; color: var(--sub); }
+.sector-bar button { font-size: 12px; padding: 4px 10px; }
+.sector-bar button.on { border-color: var(--accent); color: var(--accent2); }
 .sector-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
 .sector-no { font-family: var(--num); font-style: italic; font-weight: 700; color: var(--mc); }
 .mode-tag { color: var(--sub); font-weight: 400; font-size: 12px; }
