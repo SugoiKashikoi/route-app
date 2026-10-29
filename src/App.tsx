@@ -4,7 +4,9 @@ import { PlaceInput } from "./PlaceInput";
 import { DateTimeField, TimeField } from "./TimeFields";
 import { formatClock, formatDistance, formatDuration, toLocalInput } from "./lib/format";
 import { legUrl, navigateFromHereUrl } from "./lib/mapsLinks";
-import { searchAll, searchFrom } from "./lib/routes";
+import { optimizeOrder, searchAll, searchFrom } from "./lib/routes";
+import { fetchHours, hoursWarning } from "./lib/hours";
+import { dayKey, eventDays, parseIcs, type CalEvent } from "./lib/ics";
 import { buildRules, DEFAULT_MORNING, forwardSchedule, startForArrival, type StopTime } from "./lib/schedule";
 import { encodePlan, toSharedPlan } from "./lib/share";
 import { fuelCost, formatYen, loadCar, saveCar, type CarSettings } from "./lib/cost";
@@ -145,6 +147,7 @@ export function App() {
     setFocus(null);
     setLegs([]);
     setSchedule([]);
+    setHoursWarn([]);
     setStep(0);
   };
 
@@ -208,6 +211,66 @@ export function App() {
     });
 
   const ready = stops.every((s) => s.text.trim());
+  const opts = { tolls: car.tolls };
+  /** 地点ごとの営業時間の警告(設定でオンのときだけ取得) */
+  const [hoursWarn, setHoursWarn] = useState<(string | undefined)[]>([]);
+  const [calEvents, setCalEvents] = useState<CalEvent[]>([]);
+
+  async function checkHours(sched: StopTime[]) {
+    if (!car.hours || !apiKey) return setHoursWarn([]);
+    const out = await Promise.all(
+      stops.map(async (s, i) => {
+        if (i === 0 || !s.placeId) return undefined;
+        try {
+          return hoursWarning((await fetchHours(apiKey, s.placeId)) ?? undefined, sched[i]?.arrive, sched[i]?.depart);
+        } catch {
+          return undefined;
+        }
+      }),
+    );
+    setHoursWarn(out);
+  }
+
+  /** 経由地の順番を車の所要で最適化(新幹線・宿泊・時刻指定のある経由地があると使えない) */
+  const mids = stops.slice(1, -1);
+  const canOptimize = mids.length >= 2 && mids.every((s) => !s.overnight && !s.departAt && !s.arriveBy) && stops.every((s) => s.modeToNext !== "FIXED");
+  async function optimize() {
+    setBusy(true);
+    const res = await optimizeOrder(apiKey, stops);
+    setBusy(false);
+    if (typeof res === "string") return setNotice(`訪問順を最適化できませんでした: ${res}`);
+    if (res.every((v, k) => v === k)) return setNotice("今の順番がすでに最短(車で計算)です。");
+    setStops([stops[0], ...res.map((k) => mids[k]), stops[stops.length - 1]]);
+    resetResult();
+    setNotice("経由地の順番を車の所要時間が短くなるように並べ替えました。検索し直してください。");
+  }
+
+  /** .ics から指定日の予定を経由地にする。出発地はそのまま、目的地は出発地に戻る */
+  function applyCalendarDay(day: string) {
+    const evs = calEvents.filter((e) => dayKey(e.start) === day).slice(0, MAX_STOPS - 2);
+    const hm = (d: Date) => `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
+    const home = stops[0];
+    setStops([
+      home,
+      ...evs.map((e) => ({
+        ...newStop(home.modeToNext),
+        text: e.location,
+        arriveBy: hm(e.start),
+        dwellMin: e.end ? Math.max(0, Math.round((e.end.getTime() - e.start.getTime()) / 60_000)) : 0,
+      })),
+      { ...newStop(), text: home.text, placeId: home.placeId },
+    ]);
+    setCalEvents([]);
+    resetResult();
+    setNotice(`${day} の予定${evs.length}件を経由地にしました(到着時刻=予定の開始、滞在=予定の長さ)。`);
+  }
+
+  async function loadIcs(file: File) {
+    const evs = parseIcs(await file.text());
+    if (!evs.length) return setNotice("場所と時刻のある予定が見つかりませんでした(終日の予定・場所のない予定は使えません)。");
+    setCalEvents(evs);
+    setNotice("");
+  }
 
   async function search() {
     setBusy(true);
@@ -226,7 +289,7 @@ export function App() {
     if (timeMode === "arrive" && valid) {
       rules[rules.length - 1].arriveBy = target;
       // 1回目: 所要時間の概算 → 出発時刻を逆算 → 2回目: その時刻の渋滞・時刻表で取り直す
-      const rough = await searchAll(apiKey, stops);
+      const rough = await searchAll(apiKey, stops, opts);
       const est = startForArrival(durations(rough), rules, target);
       if (!est) {
         res = rough;
@@ -235,22 +298,24 @@ export function App() {
         res = rough;
         msg = "指定の到着時刻には間に合いません。いま出発した場合の時刻です。";
       } else {
-        res = await searchFrom(apiKey, stops, est, rules);
+        res = await searchFrom(apiKey, stops, est, rules, opts);
         start = startForArrival(durations(res), rules, target) ?? est;
         msg = "到着時刻から逆算した目安です(到着指定は2回検索するため、リクエスト数は区間数×2)。";
       }
     } else if (timeMode === "depart" && valid && target.getTime() > now.getTime() + 60_000) {
       start = target;
-      res = await searchFrom(apiKey, stops, start, rules);
+      res = await searchFrom(apiKey, stops, start, rules, opts);
     } else {
       if (timeMode === "depart") msg = "過去の時刻のため、いま出発として計算しました。";
       // 地点ごとの出発時刻があると次の区間の出発時刻が変わるので、順番に取得する
-      res = rules.some((r) => r.departAt) ? await searchFrom(apiKey, stops, now, rules) : await searchAll(apiKey, stops);
+      res = rules.some((r) => r.departAt) ? await searchFrom(apiKey, stops, now, rules, opts) : await searchAll(apiKey, stops, opts);
     }
 
+    const sched = forwardSchedule(durations(res), rules, start);
     setLegs(res);
-    setSchedule(forwardSchedule(durations(res), rules, start));
+    setSchedule(sched);
     setNotice(msg);
+    checkHours(sched);
     setBusy(false);
     setTab("list");
   }
@@ -268,7 +333,7 @@ export function App() {
       const here: Stop = { ...stops[step], text: "現在地", placeId: undefined, latLng: { lat: pos.coords.latitude, lng: pos.coords.longitude }, dwellMin: 0, departAt: undefined, overnight: undefined };
       const rest = [here, ...stops.slice(step + 1)];
       const rules = buildRules(rest, now);
-      const res = await searchFrom(apiKey, rest, now, rules);
+      const res = await searchFrom(apiKey, rest, now, rules, opts);
       setLegs([...legs.slice(0, step), ...res]);
       setSchedule([...schedule.slice(0, step), ...forwardSchedule(durations(res), rules, now)]);
       setNotice(`${formatClock(now)} に現在地から${label(step + 1)}以降を再計算しました。`);
@@ -302,7 +367,13 @@ export function App() {
   }).filter((x) => x.sec > 0);
   const driveM = okLegs.filter((l) => l.mode === "DRIVE").reduce((a, l) => a + l.distanceMeters, 0);
   const fuel = driveM > 0 ? fuelCost(driveM, car) : null;
-  const cautions = legs.map((l, i) => legCautions(l, schedule[i + 1]?.slackMin, stops[i + 1]?.modeToNext === "FIXED" && i + 1 < stops.length - 1));
+  const cautions = legs.map((l, i) => {
+    const c = legCautions(l, schedule[i + 1]?.slackMin, stops[i + 1]?.modeToNext === "FIXED" && i + 1 < stops.length - 1);
+    const h = hoursWarn[i + 1];
+    return h ? [...c, `${label(i + 1)}: ${h}`] : c;
+  });
+  const tollLegs = okLegs.filter((l) => l.tollYen !== undefined || l.tollUnknown);
+  const tollYen = tollLegs.reduce((a, l) => a + (l.tollYen ?? 0), 0);
   const cautionCount = cautions.filter((c) => c.length > 0).length;
   const startAt = schedule[0]?.depart;
   const endAt = schedule.at(-1)?.arrive;
@@ -361,6 +432,15 @@ export function App() {
               </label>
             </div>
             <p className="note">入力すると、車の区間のガソリン代の目安を表示します(距離÷燃費×単価。高速代は含みません)。</p>
+            <h2>OPTION</h2>
+            <label className="check">
+              <input type="checkbox" checked={!!car.tolls} onChange={(e) => updateCar({ tolls: e.target.checked || undefined })} />
+              高速代を表示(車区間。月1,000回まで無料、超えると1,000回あたり約$15)
+            </label>
+            <label className="check">
+              <input type="checkbox" checked={!!car.hours} onChange={(e) => updateCar({ hours: e.target.checked || undefined })} />
+              営業時間を確認(候補から選んだ地点のみ・1週間は再取得しない。月1,000回まで無料、超えると1,000回あたり約$20)
+            </label>
           </section>
         )}
 
@@ -412,7 +492,24 @@ export function App() {
             <button className="link" onClick={() => { setStops(samplePreset()); resetResult(); }} title="上野駅→上野公園(30分)→東京駅→皇居外苑">
               サンプル
             </button>
+            <label className="link file" title="カレンダーから書き出した .ics を読み込む(ブラウザの中だけで処理)">
+              📅 カレンダー
+              <input type="file" accept=".ics,text/calendar" aria-label="カレンダー(.ics)を読み込む" onChange={(e) => { const f = e.target.files?.[0]; if (f) loadIcs(f); e.target.value = ""; }} />
+            </label>
           </h2>
+          {calEvents.length > 0 && (
+            <div className="drawer cal-pick">
+              <p className="note">どの日の予定を経由地にしますか?(場所のある予定のみ)</p>
+              <div className="cal-days">
+                {eventDays(calEvents).map((d) => (
+                  <button key={d} onClick={() => applyCalendarDay(d)}>
+                    {Number(d.slice(5, 7))}/{Number(d.slice(8))}({calEvents.filter((e) => dayKey(e.start) === d).length}件)
+                  </button>
+                ))}
+                <button className="link" onClick={() => setCalEvents([])}>やめる</button>
+              </div>
+            </div>
+          )}
           <ol className="stops">
             {stops.map((s, i) => {
               const first = i === 0;
@@ -537,7 +634,18 @@ export function App() {
               );
             })}
           </ol>
-          <button className="add" onClick={add} disabled={stops.length >= MAX_STOPS}>＋ 経由地を追加</button>
+          <div className="add-row">
+            <button className="add" onClick={add} disabled={stops.length >= MAX_STOPS}>＋ 経由地を追加</button>
+            <button
+              className="add"
+              onClick={optimize}
+              disabled={!canOptimize || !ready || busy || !apiKey}
+              title={canOptimize ? "経由地の順番を車の所要時間が短くなるように並べ替え" : "経由地が2つ以上あり、新幹線・宿泊・時刻指定がないときに使えます"}
+            >
+              🔀 訪問順を最適化
+            </button>
+          </div>
+          {notice && legs.length === 0 && <p className="note hi">{notice}</p>}
         </section>
 
         <section className="block">
@@ -597,6 +705,9 @@ export function App() {
               <div className="hud-badges">
                 <Badges t={schedule.at(-1)} />
                 {fuel !== null && <span className="chip">⛽ ガソリン代 約{formatYen(fuel)}</span>}
+                {tollLegs.length > 0 && (
+                  <span className="chip">🛣 高速代 約{formatYen(tollYen)}{tollLegs.some((l) => l.tollUnknown) ? "+不明分" : ""}</span>
+                )}
                 {cautionCount > 0 && <span className="chip bad">⚠ 要注意 {cautionCount}区間</span>}
               </div>
               {driveM > 0 && fuel === null && <div className="info">⚙ 設定で燃費とガソリン単価を入れると、ガソリン代の目安を表示します。</div>}
@@ -614,11 +725,12 @@ export function App() {
             <ol className="sectors">
               {legs.map((l, i) => (
                 <Fragment key={i}>
-                  {i > 0 && schedule[i] && (schedule[i].dwellMin > 0 || schedule[i].waitMin > 0 || schedule[i].slackMin !== undefined || stops[i]?.overnight) && (
+                  {i > 0 && schedule[i] && (schedule[i].dwellMin > 0 || schedule[i].waitMin > 0 || schedule[i].slackMin !== undefined || stops[i]?.overnight || hoursWarn[i]) && (
                     <li className="pit">
                       <span className="plate sm">{label(i)}</span>
                       <span className="mono">{clock(schedule[i].arrive)}〜{clock(schedule[i].depart)}</span>
                       {schedule[i].dwellMin > 0 && <span className="chip">滞在 {formatDuration(schedule[i].dwellMin * 60)}</span>}
+                      {hoursWarn[i] && <span className="chip bad">🕘 {hoursWarn[i]}</span>}
                       <Badges t={schedule[i]} overnight={stops[i]?.overnight} />
                     </li>
                   )}
@@ -640,6 +752,8 @@ export function App() {
                           <span className="mono">{clock(schedule[i]?.depart)} → {clock(schedule[i + 1]?.arrive)}</span>
                           {l.mode !== "FIXED" && <span>{formatDistance(l.distanceMeters)}</span>}
                           {l.mode === "DRIVE" && fuel !== null && <span>⛽ 約{formatYen(fuelCost(l.distanceMeters, car)!)}</span>}
+                          {l.tollYen !== undefined && <span>🛣 約{formatYen(l.tollYen)}</span>}
+                          {l.tollUnknown && <span>🛣 有料道路あり(金額不明)</span>}
                           {l.mode !== "FIXED" && l.start && l.end && (
                             <a href={legUrl(l.start, l.end, l.mode)} target="_blank" rel="noreferrer">Googleマップ</a>
                           )}

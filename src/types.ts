@@ -42,5 +42,6 @@ export interface LatLng {
 
 export type LegResult =
   // FIXED は両端の座標が前後の区間から分かったときだけ start/end が入る
-  | { ok: true; mode: Mode; distanceMeters: number; durationSec: number; path: LatLng[]; start?: LatLng; end?: LatLng }
+  // tollYen は高速代の取得を有効にした車区間のみ。tollUnknown は有料道路を通るが金額が出なかったとき
+  | { ok: true; mode: Mode; distanceMeters: number; durationSec: number; path: LatLng[]; start?: LatLng; end?: LatLng; tollYen?: number; tollUnknown?: boolean }
   | { ok: false; mode: Mode; error: string };

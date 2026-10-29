@@ -4,6 +4,10 @@ export interface CarSettings {
   kmPerL?: number;
   /** ガソリン単価 円/L */
   yenPerL?: number;
+  /** 車区間の高速代を取得する(Routes API が Enterprise 料金になる) */
+  tolls?: boolean;
+  /** 立ち寄り先の営業時間を確認する(Places API の Enterprise 料金) */
+  hours?: boolean;
 }
 
 const KEY = "multimodal-route:car";

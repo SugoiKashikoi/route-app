@@ -6,6 +6,9 @@ import { fillFixedEnds, fixedLeg } from "./routes";
 import { fuelCost } from "./cost";
 import { legCautions } from "./cautions";
 import { decodePlan, encodePlan, toSharedPlan } from "./share";
+import { hoursWarning, isOpenAt, type Period } from "./hours";
+import { parseIcs, parseIcsDate } from "./ics";
+import { buildOptimizeRequest } from "./routes";
 import { decodeFavorite, encodeFavorite, toFavorite } from "./favorites";
 
 describe("favorites", () => {
@@ -204,5 +207,54 @@ describe("複数日・共有", () => {
     expect(back).toEqual(JSON.parse(JSON.stringify(p)));
     expect(back?.legs[0]).toMatchObject({ m: "FIXED", f: "のぞみ1号", s: 9000 });
     expect(decodePlan("xxx")).toBeNull();
+  });
+});
+
+describe("第3弾", () => {
+  it("営業時間: 到着時に閉店・滞在中に閉店・24時間営業", () => {
+    // 毎日 10:00-18:00
+    const p: Period[] = [0, 1, 2, 3, 4, 5, 6].map((d) => ({ open: { day: d, hour: 10, minute: 0 }, close: { day: d, hour: 18, minute: 0 } }));
+    const at = (h: number, m = 0) => new Date(2026, 10, 2, h, m);
+    expect(hoursWarning(p, at(9), at(11))).toBe("到着時は営業時間外です");
+    expect(hoursWarning(p, at(17), at(19))).toBe("滞在中に閉店します");
+    expect(hoursWarning(p, at(17), at(18))).toBeUndefined();
+    expect(isOpenAt([{ open: { day: 0, hour: 0, minute: 0 } }], at(3))).toBe(true);
+    // 土曜22時〜日曜2時の週またぎ
+    expect(isOpenAt([{ open: { day: 6, hour: 22, minute: 0 }, close: { day: 0, hour: 2, minute: 0 } }], new Date(2026, 10, 1, 1, 0))).toBe(true);
+  });
+  it(".ics: 折り返し・エスケープ・UTC・終日除外", () => {
+    const ics = [
+      "BEGIN:VCALENDAR",
+      "BEGIN:VEVENT",
+      "SUMMARY:打ち合わせ",
+      "DTSTART:20261102T010000Z",
+      "DTEND:20261102T020000Z",
+      "LOCATION:東京駅\\, 丸の内",
+      " 北口",
+      "END:VEVENT",
+      "BEGIN:VEVENT",
+      "SUMMARY:終日",
+      "DTSTART;VALUE=DATE:20261102",
+      "LOCATION:どこか",
+      "END:VEVENT",
+      "BEGIN:VEVENT",
+      "SUMMARY:場所なし",
+      "DTSTART;TZID=Asia/Tokyo:20261102T150000",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+    const ev = parseIcs(ics);
+    expect(ev).toHaveLength(1);
+    expect(ev[0]).toMatchObject({ summary: "打ち合わせ", location: "東京駅, 丸の内北口" });
+    expect(ev[0].start.toISOString()).toBe("2026-11-02T01:00:00.000Z");
+    expect(parseIcsDate("20261102T150000")?.getHours()).toBe(15);
+  });
+  it("高速代: 円の金額、金額なしは不明扱い。リクエストにTOLLSを付ける", () => {
+    const base = { duration: "60s", distanceMeters: 1, polyline: { encodedPolyline: "" }, legs: [{ startLocation: { latLng: { latitude: 0, longitude: 0 } }, endLocation: { latLng: { latitude: 0, longitude: 0 } } }] };
+    expect(parseRoutesResponse("DRIVE", 200, { routes: [{ ...base, travelAdvisory: { tollInfo: { estimatedPrice: [{ currencyCode: "JPY", units: "1230" }] } } }] })).toMatchObject({ tollYen: 1230 });
+    expect(parseRoutesResponse("DRIVE", 200, { routes: [{ ...base, travelAdvisory: { tollInfo: {} } }] })).toMatchObject({ tollUnknown: true });
+    expect(buildRouteRequest({ address: "a" }, { address: "b" }, "DRIVE", undefined, { tolls: true })).toMatchObject({ extraComputations: ["TOLLS"] });
+    expect(buildRouteRequest({ address: "a" }, { address: "b" }, "WALK", undefined, { tolls: true })).not.toHaveProperty("extraComputations");
+    expect(buildOptimizeRequest([{ a: 1 }, { b: 1 }, { c: 1 }, { d: 1 }])).toMatchObject({ optimizeWaypointOrder: true, intermediates: [{ b: 1 }, { c: 1 }] });
   });
 });

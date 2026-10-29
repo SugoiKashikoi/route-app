@@ -222,3 +222,11 @@ select:focus { border-color: var(--accent); outline: none; }
 .view-name { color: var(--text, #fff); font-size: 13px; }
 .overnight-opts { color: var(--amber); }
 .share-plan { margin-top: 10px; width: 100%; font-size: 13px; }
+
+.add-row { display: flex; gap: 8px; }
+.add-row .add { flex: 1; }
+.link.file { position: relative; cursor: pointer; margin-left: 10px; }
+.link.file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+.check { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; color: var(--sub); margin: 6px 0; }
+.check input { margin-top: 2px; width: auto; }
+.cal-days { display: flex; flex-wrap: wrap; gap: 6px; }
