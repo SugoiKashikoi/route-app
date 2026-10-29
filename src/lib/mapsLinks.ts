@@ -18,3 +18,9 @@ export function navigateFromHereUrl(end: LatLng, mode: Mode = "DRIVE"): string {
   const nav = mode === "TRANSIT" ? "" : "&dir_action=navigate";
   return `https://www.google.com/maps/dir/?api=1&destination=${pt(end)}&travelmode=${TRAVEL[mode]}${nav}`;
 }
+
+/** 地名どうしでGoogleマップの経路を開く(座標が手元にない閲覧専用ページ用) */
+export function legUrlByName(from: string, to: string, mode: Mode): string {
+  const q = encodeURIComponent;
+  return `https://www.google.com/maps/dir/?api=1&origin=${q(from)}&destination=${q(to)}&travelmode=${TRAVEL[mode]}`;
+}

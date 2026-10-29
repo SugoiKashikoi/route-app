@@ -20,10 +20,16 @@ interface RoutesResponse {
 interface PlaceRef {
   placeId?: string;
   address?: string;
+  latLng?: LatLng;
 }
 
 const ll = (p: LatLngObj): LatLng => ({ lat: p.latitude, lng: p.longitude });
-const waypoint = (p: PlaceRef) => (p.placeId ? { placeId: p.placeId } : { address: p.address });
+const waypoint = (p: PlaceRef) =>
+  p.latLng
+    ? { location: { latLng: { latitude: p.latLng.lat, longitude: p.latLng.lng } } }
+    : p.placeId
+      ? { placeId: p.placeId }
+      : { address: p.address };
 
 export function buildRouteRequest(origin: PlaceRef, destination: PlaceRef, mode: Mode, departure?: Date) {
   const body: Record<string, unknown> = {
@@ -94,7 +100,7 @@ export async function fetchLeg(apiKey: string, from: Stop, to: Stop, departure?:
   const mode = from.modeToNext;
   if (mode === "FIXED") return fixedLeg(from);
   if (!apiKey) return { ok: false, mode, error: "APIキーが未設定です(画面上部の設定で入力してください)" };
-  const ref = (s: Stop): PlaceRef => (s.placeId ? { placeId: s.placeId } : { address: s.text });
+  const ref = (s: Stop): PlaceRef => (s.latLng ? { latLng: s.latLng } : s.placeId ? { placeId: s.placeId } : { address: s.text });
   // 過去・直近の時刻を渡すとAPIがエラーを返すため、その場合は「いま」として省略する
   const dep = departure && departure.getTime() > Date.now() + 60_000 ? departure : undefined;
   try {

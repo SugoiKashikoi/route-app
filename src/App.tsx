@@ -5,18 +5,18 @@ import { DateTimeField, TimeField } from "./TimeFields";
 import { formatClock, formatDistance, formatDuration, toLocalInput } from "./lib/format";
 import { legUrl, navigateFromHereUrl } from "./lib/mapsLinks";
 import { searchAll, searchFrom } from "./lib/routes";
-import { buildRules, forwardSchedule, startForArrival, type StopTime } from "./lib/schedule";
+import { buildRules, DEFAULT_MORNING, forwardSchedule, startForArrival, type StopTime } from "./lib/schedule";
+import { encodePlan, toSharedPlan } from "./lib/share";
 import { fuelCost, formatYen, loadCar, saveCar, type CarSettings } from "./lib/cost";
 import { legCautions } from "./lib/cautions";
 import { decodeFavorite, encodeFavorite, loadFavorites, saveFavorites, toFavorite, type Favorite } from "./lib/favorites";
-import { MODE_LABEL, type LegResult, type Mode, type Stop } from "./types";
+import { MODE_ICON, MODE_LABEL, type LegResult, type Mode, type Stop } from "./types";
 
 const MAX_STOPS = 10;
 const MIN_STOPS = 2;
 const STORAGE_KEY = "multimodal-route:stops";
 const API_KEY_STORAGE = "multimodal-route:apikey";
 const MODES = Object.keys(MODE_LABEL) as Mode[];
-const MODE_ICON: Record<Mode, string> = { DRIVE: "🚗", WALK: "🚶", BICYCLE: "🚲", TRANSIT: "🚆", FIXED: "🚄" };
 
 function loadApiKey(): string {
   try {
@@ -90,7 +90,7 @@ function importFromHash(): { fav: Favorite; save: boolean } | null {
 }
 
 /** 余裕・遅れ・待ちの表示 */
-function Badges({ t }: { t?: StopTime }) {
+function Badges({ t, overnight }: { t?: StopTime; overnight?: boolean }) {
   if (!t) return null;
   return (
     <>
@@ -100,7 +100,8 @@ function Badges({ t }: { t?: StopTime }) {
         ) : (
           <span className="chip bad">遅れ {formatDuration(-t.slackMin * 60)}</span>
         ))}
-      {t.waitMin > 0 && <span className="chip wait">待ち {formatDuration(t.waitMin * 60)}</span>}
+      {overnight && <span className="chip wait">🏨 宿泊</span>}
+      {!overnight && t.waitMin > 0 && <span className="chip wait">待ち {formatDuration(t.waitMin * 60)}</span>}
     </>
   );
 }
@@ -254,6 +255,43 @@ export function App() {
     setTab("list");
   }
 
+  /** 当日: 現在地から残りの区間を取り直す(済んだ区間はそのまま) */
+  async function rerouteFromHere() {
+    if (!navigator.geolocation) return setNotice("この端末では現在地を取得できません。");
+    setBusy(true);
+    setNotice("現在地を取得中…");
+    try {
+      const pos = await new Promise<GeolocationPosition>((ok, ng) =>
+        navigator.geolocation.getCurrentPosition(ok, ng, { enableHighAccuracy: true, timeout: 15_000 }),
+      );
+      const now = new Date();
+      const here: Stop = { ...stops[step], text: "現在地", placeId: undefined, latLng: { lat: pos.coords.latitude, lng: pos.coords.longitude }, dwellMin: 0, departAt: undefined, overnight: undefined };
+      const rest = [here, ...stops.slice(step + 1)];
+      const rules = buildRules(rest, now);
+      const res = await searchFrom(apiKey, rest, now, rules);
+      setLegs([...legs.slice(0, step), ...res]);
+      setSchedule([...schedule.slice(0, step), ...forwardSchedule(durations(res), rules, now)]);
+      setNotice(`${formatClock(now)} に現在地から${label(step + 1)}以降を再計算しました。`);
+    } catch (e) {
+      setNotice(`現在地を取得できませんでした(${e instanceof GeolocationPositionError ? "位置情報の許可を確認してください" : String(e)})。`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** 予定ごと閲覧専用で共有(APIキーなしで見られる) */
+  async function sharePlan() {
+    const url = `${location.origin}${location.pathname}#view=${encodePlan(toSharedPlan(favName.trim(), stops, legs, schedule))}`;
+    try {
+      if (navigator.share) return await navigator.share({ title: "ルートの予定", url });
+      await navigator.clipboard.writeText(url);
+      setNotice("閲覧専用の予定リンクをコピーしました。開いた人はAPIキーなしで予定表を見られます(地点名が含まれます)。");
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      setNotice(`コピーできませんでした。このリンクを送ってください: ${url}`);
+    }
+  }
+
   const okLegs = legs.filter((l): l is Extract<LegResult, { ok: true }> => l.ok);
   const failed = legs.length - okLegs.length;
   const totalSec = okLegs.reduce((a, l) => a + l.durationSec, 0);
@@ -394,7 +432,7 @@ export function App() {
                       />
                       {!first && (
                         <div className="stop-opts">
-                          {!last && (
+                          {!last && !s.overnight && (
                             <label className="mini">
                               滞在
                               <input
@@ -411,6 +449,25 @@ export function App() {
                           <button className={`mini-btn ${showTime ? "on" : ""}`} onClick={() => toggleTime(s.id)}>
                             ⏱ 時刻指定
                           </button>
+                          {!last && (
+                            <button
+                              className={`mini-btn ${s.overnight ? "on" : ""}`}
+                              aria-pressed={!!s.overnight}
+                              aria-label={`${label(i)}で宿泊`}
+                              onClick={() => update(i, { overnight: !s.overnight || undefined, departAt: undefined })}
+                            >
+                              🏨 宿泊
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      {s.overnight && !last && (
+                        <div className="stop-opts overnight-opts">
+                          <label className="mini">
+                            翌日
+                            <TimeField value={s.departAt ?? DEFAULT_MORNING} onChange={(v) => update(i, { departAt: v })} />
+                            に{label(i)}を出発
+                          </label>
                         </div>
                       )}
                       {showTime && (
@@ -420,7 +477,7 @@ export function App() {
                             <TimeField optional value={s.arriveBy ?? ""} onChange={(v) => update(i, { arriveBy: v || undefined })} />
                             までに着く
                           </label>
-                          {!last && (
+                          {!last && !s.overnight && (
                             <label className="mini">
                               {label(i)}を
                               <TimeField optional value={s.departAt ?? ""} onChange={(v) => update(i, { departAt: v || undefined })} />
@@ -545,6 +602,7 @@ export function App() {
               {driveM > 0 && fuel === null && <div className="info">⚙ 設定で燃費とガソリン単価を入れると、ガソリン代の目安を表示します。</div>}
               {failed > 0 && <div className="warn">{failed}区間が取得できなかったため、合計は取得できた区間のみの値です。</div>}
               {notice && <div className="info">{notice}</div>}
+              <button className="share-plan" onClick={sharePlan} aria-label="予定を閲覧専用で共有">📤 予定を共有(閲覧専用)</button>
             </div>
 
             <div className="sector-bar">
@@ -556,12 +614,12 @@ export function App() {
             <ol className="sectors">
               {legs.map((l, i) => (
                 <Fragment key={i}>
-                  {i > 0 && schedule[i] && (schedule[i].dwellMin > 0 || schedule[i].waitMin > 0 || schedule[i].slackMin !== undefined) && (
+                  {i > 0 && schedule[i] && (schedule[i].dwellMin > 0 || schedule[i].waitMin > 0 || schedule[i].slackMin !== undefined || stops[i]?.overnight) && (
                     <li className="pit">
                       <span className="plate sm">{label(i)}</span>
                       <span className="mono">{clock(schedule[i].arrive)}〜{clock(schedule[i].depart)}</span>
                       {schedule[i].dwellMin > 0 && <span className="chip">滞在 {formatDuration(schedule[i].dwellMin * 60)}</span>}
-                      <Badges t={schedule[i]} />
+                      <Badges t={schedule[i]} overnight={stops[i]?.overnight} />
                     </li>
                   )}
                   <li
@@ -603,6 +661,11 @@ export function App() {
                           <a className="go" href={navigateFromHereUrl(l.end, l.mode)} target="_blank" rel="noreferrer">
                             {l.mode === "DRIVE" ? "車ナビ開始(CarPlay対応)" : `${MODE_LABEL[l.mode]}で${label(i + 1)}へ出発`}
                           </a>
+                        )}
+                        {apiKey && (
+                          <button className="next" disabled={busy} onClick={rerouteFromHere} aria-label="現在地から再計算">
+                            📍 現在地から再計算
+                          </button>
                         )}
                         <button className="next" onClick={() => setStep(i + 1)}>
                           {i < legs.length - 1

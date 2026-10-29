@@ -5,6 +5,7 @@ import { buildRules, forwardSchedule, resolveClock, startForArrival, type StopRu
 import { fillFixedEnds, fixedLeg } from "./routes";
 import { fuelCost } from "./cost";
 import { legCautions } from "./cautions";
+import { decodePlan, encodePlan, toSharedPlan } from "./share";
 import { decodeFavorite, encodeFavorite, toFavorite } from "./favorites";
 
 describe("favorites", () => {
@@ -174,5 +175,34 @@ describe("ガソリン代・要注意", () => {
     expect(legCautions(leg("DRIVE", 30), -5, true)).toEqual(["発車に5分間に合いません"]);
     expect(legCautions(leg("WALK", 25), undefined, false)).toHaveLength(1);
     expect(legCautions(leg("DRIVE", 130), undefined, false)).toHaveLength(1);
+  });
+});
+
+describe("複数日・共有", () => {
+  it("宿泊した地点は翌日の指定時刻に出発し、以降の時刻指定は翌日基準", () => {
+    const base = new Date(2026, 0, 1, 9, 0);
+    const stops: Stop[] = [
+      { id: "1", text: "A", modeToNext: "DRIVE" },
+      { id: "2", text: "B", modeToNext: "DRIVE", overnight: true, departAt: "8:30", dwellMin: 60 },
+      { id: "3", text: "C", modeToNext: "DRIVE", arriveBy: "10:00" },
+    ];
+    const rules = buildRules(stops, base);
+    const t = forwardSchedule([3600, 3600], rules, base);
+    expect(t[1].depart).toEqual(new Date(2026, 0, 2, 8, 30));
+    expect(t[2].arrive).toEqual(new Date(2026, 0, 2, 9, 30));
+    expect(t[2].slackMin).toBe(30);
+  });
+  it("閲覧専用の予定はURL文字列で往復できる", () => {
+    const stops: Stop[] = [
+      { id: "1", text: "東京駅", modeToNext: "FIXED", fixedName: "のぞみ1号" },
+      { id: "2", text: "新大阪駅", modeToNext: "WALK" },
+    ];
+    const legs: LegResult[] = [{ ok: true, mode: "FIXED", distanceMeters: 0, durationSec: 9000, path: [] }];
+    const sched = forwardSchedule([9000], [{ dwellMin: 0 }, { dwellMin: 0 }], new Date(2026, 0, 1, 10, 0));
+    const p = toSharedPlan("出張", stops, legs, sched);
+    const back = decodePlan(encodePlan(p));
+    expect(back).toEqual(JSON.parse(JSON.stringify(p)));
+    expect(back?.legs[0]).toMatchObject({ m: "FIXED", f: "のぞみ1号", s: 9000 });
+    expect(decodePlan("xxx")).toBeNull();
   });
 });

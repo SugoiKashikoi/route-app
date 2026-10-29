@@ -79,20 +79,31 @@ export function resolveClock(hhmm: string | undefined, base: Date): Date | undef
  * 次が新幹線・飛行機の地点は、発車時刻まで待ち、発車時刻までに着けるかを余裕/遅れで判定する。
  */
 export function buildRules(stops: Stop[], base: Date): StopRule[] {
+  let day = new Date(base);
   return stops.map((s, i) => {
     const mid = i > 0 && i < stops.length - 1;
     const rule: StopRule = {
       dwellMin: s.dwellMin ?? 0,
-      departAt: mid ? resolveClock(s.departAt, base) : undefined,
-      arriveBy: i > 0 ? resolveClock(s.arriveBy, base) : undefined,
+      departAt: mid && !s.overnight ? resolveClock(s.departAt, day) : undefined,
+      arriveBy: i > 0 ? resolveClock(s.arriveBy, day) : undefined,
     };
-    const train = s.modeToNext === "FIXED" && i < stops.length - 1 ? resolveClock(s.fixedDepart, base) : undefined;
+    if (mid && s.overnight) {
+      // 宿泊: 翌日の指定時刻(未指定は9:00)に出発。以降の "HH:MM" は翌日を基準にする
+      day = new Date(day.getTime() + 24 * 3600_000);
+      rule.dwellMin = 0;
+      rule.departAt = resolveClock(s.departAt ?? DEFAULT_MORNING, day);
+    }
+    const train = s.modeToNext === "FIXED" && i < stops.length - 1 ? resolveClock(s.fixedDepart, day) : undefined;
     if (train) {
+      // 新幹線・飛行機は発車時刻に出る(宿泊明けも、朝の出発時刻ではなく発車時刻)
       rule.departAt = train;
       // 滞在があるなら、滞在を終えてから乗れるように着く必要がある
       const by = new Date(train.getTime() - rule.dwellMin * MIN);
-      if (i > 0 && (!rule.arriveBy || by < rule.arriveBy)) rule.arriveBy = by;
+      if (i > 0 && !s.overnight && (!rule.arriveBy || by < rule.arriveBy)) rule.arriveBy = by;
     }
     return rule;
   });
 }
+
+/** 宿泊した翌日の出発時刻(未指定時) */
+export const DEFAULT_MORNING = "09:00";
