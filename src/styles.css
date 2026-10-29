@@ -334,6 +334,7 @@ h2::after { height: 2px; background: repeating-linear-gradient(90deg, var(--acce
 .modes button { border-radius: 999px; font-weight: 600; }
 .modes button.on { background: var(--mc); }
 .seg { border-radius: 999px; overflow: hidden; }
+.seg button { border-radius: 999px; }
 .seg button.on { background: var(--grad); }
 
 /* START: 斜めの大ボタンにきらめきが流れる */
