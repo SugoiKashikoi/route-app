@@ -119,7 +119,7 @@ export function MapView({ apiKey, legs, visible, focus }: Props) {
       if (focus !== null && (focus === i || focus + 1 === i)) bounds.extend(p);
       const pin = new google.maps.marker.PinElement({
         glyph: String.fromCharCode(65 + i),
-        background: "#ff6f9f",
+        background: "#ff8a1f",
         borderColor: "#ffffff",
         glyphColor: "#ffffff",
       });

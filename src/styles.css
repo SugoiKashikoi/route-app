@@ -412,3 +412,23 @@ h2::after { height: 0; border-top: 2px dotted var(--accent); background: none; o
 .tabs button { font-family: var(--round); font-style: normal; }
 .tabs button.on { background: none; box-shadow: inset 0 -3px 0 var(--accent); }
 .stop::after { content: none; }
+
+/* 倉本千奈のイメージカラー(オレンジ)。色を変えるときは --china だけ差し替える */
+:root {
+  --china: #ff8a1f;
+  --accent: var(--china); --accent2: #ffb35c; --pink: var(--china);
+  --grad: linear-gradient(100deg, #ffb35c 0%, var(--china) 55%, #ff7a3d 100%);
+  --line: #f8e2cc; --line2: #f1cfaa; --card2: #fff4e8;
+}
+body {
+  background:
+    radial-gradient(circle, color-mix(in srgb, var(--china) 14%, transparent) 3px, transparent 3.5px) 0 0 / 26px 26px,
+    radial-gradient(circle, rgba(226,176,74,.12) 2px, transparent 2.5px) 13px 13px / 26px 26px,
+    var(--bg);
+}
+.topbar { background: linear-gradient(180deg, #fff, #fff4e8); }
+.topbar::after { background: radial-gradient(circle at 8px 0, #fff4e8 7px, transparent 7.5px) 0 0 / 16px 8px repeat-x; }
+.stop, .drawer, .sector { box-shadow: 0 3px 10px color-mix(in srgb, var(--china) 10%, transparent); }
+.start { box-shadow: 0 6px 16px color-mix(in srgb, var(--china) 35%, transparent); }
+.hud::before { background: radial-gradient(circle, color-mix(in srgb, var(--china) 14%, transparent) 4px, transparent 4.5px) 0 0 / 18px 18px; }
+input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--china) 20%, transparent); }
