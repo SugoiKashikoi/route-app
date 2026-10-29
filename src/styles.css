@@ -364,3 +364,4 @@ h2::after { height: 2px; background: repeating-linear-gradient(90deg, var(--acce
   .sectors > li { animation: none; }
 }
 .nav-test { word-break: break-all; }
+.nav-test { white-space: pre-wrap; max-height: 320px; overflow: auto; }

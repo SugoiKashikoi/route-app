@@ -6,6 +6,7 @@ import { formatClock, formatDistance, formatDuration, toLocalInput } from "./lib
 import { legUrl, legUrlByName, navigateFromHereUrl, placeUrl } from "./lib/mapsLinks";
 import { loadUsage, SKU, type Sku } from "./lib/quota";
 import { loadNavitimeKey, saveNavitimeKey, testNavitime } from "./lib/navitime";
+import { testTransitApi } from "./lib/transitApiTest";
 import { optimizeOrder, searchAll, searchFrom } from "./lib/routes";
 import { fetchHours, hoursWarning } from "./lib/hours";
 import { dayKey, eventDays, parseIcs, type CalEvent } from "./lib/ics";
@@ -471,6 +472,22 @@ export function App() {
               >
                 接続テスト(岡山駅→倉敷駅・1回分を使用)
               </button>
+            </div>
+            <div className="stop-opts">
+              <button
+                className="mini-btn"
+                onClick={async () => {
+                  setNavTest("Transit API をテスト中…(最大1分)");
+                  setNavTest(await testTransitApi());
+                }}
+              >
+                Transit API テスト(キー不要・無料)
+              </button>
+              {navTest && (
+                <button className="mini-btn" onClick={() => navigator.clipboard?.writeText(navTest).catch(() => undefined)}>
+                  結果をコピー
+                </button>
+              )}
             </div>
             {navTest && <p className="note hi nav-test">{navTest}</p>}
             <p className="note">電車の所要時間を自動で取れるか試すための欄です。結果をそのまま開発者に送ってください。まだ検索には使いません。</p>
