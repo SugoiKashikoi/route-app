@@ -25,6 +25,8 @@ export interface Stop {
   arriveBy?: string;
   /** ここで宿泊する(経由地のみ)。departAt は翌日の出発時刻として扱う */
   overnight?: boolean;
+  /** modeToNext が TRANSIT のとき、所要(分)を手入力(APIを使わない。日本の電車はAPIで取れないため) */
+  transitMin?: number;
   /** 地名の代わりに座標で指定(現在地からの再計算で使う) */
   latLng?: LatLng;
   /** modeToNext が FIXED のときの便名(例: のぞみ12号) */
@@ -43,5 +45,5 @@ export interface LatLng {
 export type LegResult =
   // FIXED は両端の座標が前後の区間から分かったときだけ start/end が入る
   // tollYen は高速代の取得を有効にした車区間のみ。tollUnknown は有料道路を通るが金額が出なかったとき
-  | { ok: true; mode: Mode; distanceMeters: number; durationSec: number; path: LatLng[]; start?: LatLng; end?: LatLng; tollYen?: number; tollUnknown?: boolean }
+  | { ok: true; mode: Mode; distanceMeters: number; durationSec: number; path: LatLng[]; start?: LatLng; end?: LatLng; tollYen?: number; tollUnknown?: boolean; manual?: boolean }
   | { ok: false; mode: Mode; error: string };

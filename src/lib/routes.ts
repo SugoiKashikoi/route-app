@@ -65,7 +65,12 @@ export function parseRoutesResponse(mode: Mode, status: number, data: RoutesResp
   }
   const route = data.routes?.[0];
   if (!route) {
-    const hint = mode === "TRANSIT" || mode === "BICYCLE" ? "(この地域・区間では未対応の可能性があります)" : "";
+    const hint =
+      mode === "TRANSIT"
+        ? "(日本の電車・バスはGoogleのAPIでは検索できません。Googleマップで調べて所要時間を入力してください)"
+        : mode === "BICYCLE"
+          ? "(この地域・区間では未対応の可能性があります)"
+          : "";
     return { ok: false, mode, error: `経路が見つかりませんでした${hint}` };
   }
   const leg = route.legs[0];
@@ -103,7 +108,7 @@ export function fixedLeg(from: Stop): LegResult {
 /** 固定区間の両端の座標を、前後の区間の終点・始点から補う(地図に直線で描くため) */
 export function fillFixedEnds(legs: LegResult[]): LegResult[] {
   return legs.map((l, i) => {
-    if (!l.ok || l.mode !== "FIXED") return l;
+    if (!l.ok || (l.mode !== "FIXED" && !l.manual)) return l;
     const prev = legs[i - 1];
     const next = legs[i + 1];
     const start = prev?.ok ? prev.end : undefined;
@@ -115,6 +120,8 @@ export function fillFixedEnds(legs: LegResult[]): LegResult[] {
 export async function fetchLeg(apiKey: string, from: Stop, to: Stop, departure?: Date, opts: SearchOpts = {}): Promise<LegResult> {
   const mode = from.modeToNext;
   if (mode === "FIXED") return fixedLeg(from);
+  if (mode === "TRANSIT" && from.transitMin && from.transitMin > 0)
+    return { ok: true, mode, distanceMeters: 0, durationSec: from.transitMin * 60, path: [], manual: true };
   if (!apiKey) return { ok: false, mode, error: "APIキーが未設定です(画面上部の設定で入力してください)" };
   const ref = (s: Stop): PlaceRef => (s.latLng ? { latLng: s.latLng } : s.placeId ? { placeId: s.placeId } : { address: s.text });
   // 過去・直近の時刻を渡すとAPIがエラーを返すため、その場合は「いま」として省略する

@@ -3,7 +3,7 @@ import { MapView, MODE_COLOR } from "./MapView";
 import { PlaceInput } from "./PlaceInput";
 import { DateTimeField, TimeField } from "./TimeFields";
 import { formatClock, formatDistance, formatDuration, toLocalInput } from "./lib/format";
-import { legUrl, navigateFromHereUrl, placeUrl } from "./lib/mapsLinks";
+import { legUrl, legUrlByName, navigateFromHereUrl, placeUrl } from "./lib/mapsLinks";
 import { loadUsage, SKU, type Sku } from "./lib/quota";
 import { optimizeOrder, searchAll, searchFrom } from "./lib/routes";
 import { fetchHours, hoursWarning } from "./lib/hours";
@@ -56,7 +56,7 @@ function samplePreset(): Stop[] {
   const s = (text: string, modeToNext: Mode, dwellMin = 0): Stop => ({ ...newStop(modeToNext), text, dwellMin });
   return [
     s("上野駅", "WALK"),
-    s("上野恩賜公園", "TRANSIT", 30),
+    { ...s("上野恩賜公園", "TRANSIT", 30), transitMin: 15 },
     s("東京駅", "WALK"),
     s("皇居外苑", "WALK"),
   ];
@@ -624,6 +624,26 @@ export function App() {
                       </div>
                     </div>
                   )}
+                  {!last && s.modeToNext === "TRANSIT" && (
+                    <div className="stop-opts fixed-opts">
+                      <label className="mini">
+                        所要
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          step={1}
+                          aria-label={`${label(i)}→${label(i + 1)}の公共交通の所要(分)`}
+                          value={s.transitMin ?? ""}
+                          onChange={(e) => update(i, { transitMin: Number(e.target.value) || undefined })}
+                        />
+                        分
+                      </label>
+                      <a className="mini-link" href={legUrlByName(s.text || "現在地", stops[i + 1]?.text ?? "", "TRANSIT")} target="_blank" rel="noreferrer">
+                        Googleマップで乗換を調べる
+                      </a>
+                    </div>
+                  )}
                   {!last && s.modeToNext === "FIXED" && (
                     <div className="stop-opts fixed-opts">
                       <input
@@ -702,7 +722,7 @@ export function App() {
                     <span className="dot" style={{ background: MODE_COLOR[x.m] }} />
                     <span className="by-mode-name">{MODE_ICON[x.m]} {MODE_LABEL[x.m]}</span>
                     <span className="mono">{formatDuration(x.sec)}</span>
-                    <span className="by-mode-dist">{x.m === "FIXED" ? "—" : formatDistance(x.meters)}</span>
+                    <span className="by-mode-dist">{x.meters === 0 ? "—" : formatDistance(x.meters)}</span>
                   </li>
                 ))}
               </ul>
@@ -764,7 +784,8 @@ export function App() {
                         <div className="sector-time">{formatDuration(l.durationSec)}</div>
                         <div className="sector-meta">
                           <span className="mono">{clock(schedule[i]?.depart)} → {clock(schedule[i + 1]?.arrive)}</span>
-                          {l.mode !== "FIXED" && <span>{formatDistance(l.distanceMeters)}</span>}
+                          {l.mode !== "FIXED" && !l.manual && <span>{formatDistance(l.distanceMeters)}</span>}
+                          {l.manual && <span>手入力</span>}
                           {l.mode === "DRIVE" && fuel !== null && <span>⛽ 約{formatYen(fuelCost(l.distanceMeters, car)!)}</span>}
                           {l.tollYen !== undefined && <span>🛣 約{formatYen(l.tollYen)}</span>}
                           {l.tollUnknown && <span>🛣 有料道路あり(金額不明)</span>}
@@ -774,7 +795,28 @@ export function App() {
                         </div>
                       </div>
                     ) : (
-                      <div className="err">{l.error}</div>
+                      <>
+                        <div className="err">{l.error}</div>
+                        {l.mode === "TRANSIT" && (
+                          <div className="stop-opts">
+                            <a className="mini-link" href={legUrlByName(stops[i].text, stops[i + 1]?.text ?? "", "TRANSIT")} target="_blank" rel="noreferrer">
+                              Googleマップで乗換を調べる
+                            </a>
+                            <label className="mini">
+                              所要
+                              <input
+                                type="number"
+                                inputMode="numeric"
+                                min={0}
+                                aria-label={`${label(i)}→${label(i + 1)}の公共交通の所要(分)`}
+                                value={stops[i].transitMin ?? ""}
+                                onChange={(e) => update(i, { transitMin: Number(e.target.value) || undefined })}
+                              />
+                              分を入れて START
+                            </label>
+                          </div>
+                        )}
+                      </>
                     )}
                     {cautions[i].length > 0 && (
                       <ul className="cautions">

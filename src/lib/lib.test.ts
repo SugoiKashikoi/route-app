@@ -9,7 +9,7 @@ import { decodePlan, encodePlan, toSharedPlan } from "./share";
 import { hoursWarning, isOpenAt, type Period } from "./hours";
 import { parseIcs, parseIcsDate } from "./ics";
 import { SKU, take } from "./quota";
-import { buildOptimizeRequest } from "./routes";
+import { buildOptimizeRequest, fetchLeg } from "./routes";
 import { decodeFavorite, encodeFavorite, toFavorite } from "./favorites";
 
 describe("favorites", () => {
@@ -267,5 +267,12 @@ describe("無料枠の安全ライン", () => {
     for (let n = 0; n < SKU.hours.cap; n++) expect(take("hours")).toBe(true);
     expect(take("hours")).toBe(false);
     expect(take("routesEss")).toBe(true);
+  });
+});
+
+describe("公共交通の手入力", () => {
+  it("所要を入れた公共交通はAPIを使わずその時間で計算", async () => {
+    const leg = await fetchLeg("", { id: "1", text: "上野", modeToNext: "TRANSIT", transitMin: 12 }, { id: "2", text: "東京", modeToNext: "WALK" });
+    expect(leg).toMatchObject({ ok: true, durationSec: 720, manual: true });
   });
 });
