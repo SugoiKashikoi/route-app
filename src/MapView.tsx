@@ -52,7 +52,7 @@ export function MapView({ apiKey, legs, visible, focus }: Props) {
           center: { lat: 35.68, lng: 139.76 },
           zoom: 11,
           mapId: "DEMO_MAP_ID",
-          colorScheme: "DARK",
+          colorScheme: "LIGHT",
           mapTypeControl: false,
           streetViewControl: false,
         });
@@ -116,8 +116,8 @@ export function MapView({ apiKey, legs, visible, focus }: Props) {
       if (focus !== null && (focus === i || focus + 1 === i)) bounds.extend(p);
       const pin = new google.maps.marker.PinElement({
         glyph: String.fromCharCode(65 + i),
-        background: "#2f8cff",
-        borderColor: "#0b1a33",
+        background: "#ff7a00",
+        borderColor: "#ffffff",
         glyphColor: "#ffffff",
       });
       const marker = new google.maps.marker.AdvancedMarkerElement({ map: m, position: p, content: pin.element });
