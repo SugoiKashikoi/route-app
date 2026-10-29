@@ -288,3 +288,4 @@ h2::after { background: repeating-linear-gradient(90deg, var(--line2) 0 6px, tra
 .view-name { color: var(--text); }
 .panel { background: var(--bg); }
 .note a, .view a { color: var(--accent); }
+.usage { list-style: none; padding: 0; margin: 4px 0 10px; font-size: 12px; } .usage li { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; border-bottom: 1px dashed var(--line); } a.chip { text-decoration: none; color: var(--accent); }

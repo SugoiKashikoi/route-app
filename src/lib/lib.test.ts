@@ -8,6 +8,7 @@ import { legCautions } from "./cautions";
 import { decodePlan, encodePlan, toSharedPlan } from "./share";
 import { hoursWarning, isOpenAt, type Period } from "./hours";
 import { parseIcs, parseIcsDate } from "./ics";
+import { SKU, take } from "./quota";
 import { buildOptimizeRequest } from "./routes";
 import { decodeFavorite, encodeFavorite, toFavorite } from "./favorites";
 
@@ -256,5 +257,15 @@ describe("第3弾", () => {
     expect(buildRouteRequest({ address: "a" }, { address: "b" }, "DRIVE", undefined, { tolls: true })).toMatchObject({ extraComputations: ["TOLLS"] });
     expect(buildRouteRequest({ address: "a" }, { address: "b" }, "WALK", undefined, { tolls: true })).not.toHaveProperty("extraComputations");
     expect(buildOptimizeRequest([{ a: 1 }, { b: 1 }, { c: 1 }, { d: 1 }])).toMatchObject({ optimizeWaypointOrder: true, intermediates: [{ b: 1 }, { c: 1 }] });
+  });
+});
+
+describe("無料枠の安全ライン", () => {
+  it("上限に達したら送らない", () => {
+    const store: Record<string, string> = {};
+    globalThis.localStorage = { getItem: (k: string) => store[k] ?? null, setItem: (k: string, v: string) => void (store[k] = v) } as Storage;
+    for (let n = 0; n < SKU.hours.cap; n++) expect(take("hours")).toBe(true);
+    expect(take("hours")).toBe(false);
+    expect(take("routesEss")).toBe(true);
   });
 });

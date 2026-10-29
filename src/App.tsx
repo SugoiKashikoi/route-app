@@ -3,7 +3,8 @@ import { MapView, MODE_COLOR } from "./MapView";
 import { PlaceInput } from "./PlaceInput";
 import { DateTimeField, TimeField } from "./TimeFields";
 import { formatClock, formatDistance, formatDuration, toLocalInput } from "./lib/format";
-import { legUrl, navigateFromHereUrl } from "./lib/mapsLinks";
+import { legUrl, navigateFromHereUrl, placeUrl } from "./lib/mapsLinks";
+import { loadUsage, SKU, type Sku } from "./lib/quota";
 import { optimizeOrder, searchAll, searchFrom } from "./lib/routes";
 import { fetchHours, hoursWarning } from "./lib/hours";
 import { dayKey, eventDays, parseIcs, type CalEvent } from "./lib/ics";
@@ -432,14 +433,26 @@ export function App() {
               </label>
             </div>
             <p className="note">入力すると、車の区間のガソリン代の目安を表示します(距離÷燃費×単価。高速代は含みません)。</p>
+            <h2>FREE</h2>
+            <p className="note">
+              無料枠を超えないよう、今月このブラウザで使った回数を数え、無料枠の約8割で自動停止します。別の端末の分は合算できないので、Google Cloud の「割り当て(Quota)」で1日の上限も設定してください(READMEに手順)。
+            </p>
+            <ul className="usage">
+              {(Object.keys(SKU) as Sku[]).map((k) => (
+                <li key={k}>
+                  <span>{SKU[k].label}</span>
+                  <span className="mono">{(loadUsage().n[k] ?? 0).toLocaleString()} / {SKU[k].cap.toLocaleString()}</span>
+                </li>
+              ))}
+            </ul>
             <h2>OPTION</h2>
             <label className="check">
               <input type="checkbox" checked={!!car.tolls} onChange={(e) => updateCar({ tolls: e.target.checked || undefined })} />
-              高速代を表示(車区間。月1,000回まで無料、超えると1,000回あたり約$15)
+              高速代を表示(無料枠が月1,000回と少ない区分。オフでも各区間の「Googleマップ」で料金を見られます)
             </label>
             <label className="check">
               <input type="checkbox" checked={!!car.hours} onChange={(e) => updateCar({ hours: e.target.checked || undefined })} />
-              営業時間を確認(候補から選んだ地点のみ・1週間は再取得しない。月1,000回まで無料、超えると1,000回あたり約$20)
+              営業時間を自動チェック(無料枠が月1,000回と少ない区分。オフでも「営業時間を見る」でGoogleマップを開けます)
             </label>
           </section>
         )}
@@ -725,12 +738,13 @@ export function App() {
             <ol className="sectors">
               {legs.map((l, i) => (
                 <Fragment key={i}>
-                  {i > 0 && schedule[i] && (schedule[i].dwellMin > 0 || schedule[i].waitMin > 0 || schedule[i].slackMin !== undefined || stops[i]?.overnight || hoursWarn[i]) && (
+                  {i > 0 && schedule[i] && stops[i] && (
                     <li className="pit">
                       <span className="plate sm">{label(i)}</span>
                       <span className="mono">{clock(schedule[i].arrive)}〜{clock(schedule[i].depart)}</span>
                       {schedule[i].dwellMin > 0 && <span className="chip">滞在 {formatDuration(schedule[i].dwellMin * 60)}</span>}
                       {hoursWarn[i] && <span className="chip bad">🕘 {hoursWarn[i]}</span>}
+                      <a className="chip" href={placeUrl(stops[i].text, stops[i].placeId)} target="_blank" rel="noreferrer">🕘 営業時間を見る</a>
                       <Badges t={schedule[i]} overnight={stops[i]?.overnight} />
                     </li>
                   )}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { LegResult, Mode } from "./types";
+import { capMessage, take } from "./lib/quota";
 
 export const MODE_COLOR: Record<Mode, string> = {
   DRIVE: "#1a73e8",
@@ -13,6 +14,8 @@ let loader: Promise<void> | undefined;
 
 function loadMaps(key: string): Promise<void> {
   loader ??= new Promise((resolve, reject) => {
+    // 地図の読み込み1回 = Dynamic Maps 1回
+    if (!take("maps")) return reject(new Error(capMessage("maps")));
     // loading=async では onload の時点で importLibrary が未定義のことがあるため、callback で完了を待つ
     (window as unknown as { __mapsReady: () => void }).__mapsReady = () => resolve();
     const s = document.createElement("script");

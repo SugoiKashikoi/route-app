@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { take } from "./lib/quota";
 
 interface Suggestion {
   placeId: string;
@@ -30,7 +31,9 @@ export function PlaceInput({ apiKey, value, placeholder, label, onChange }: Prop
       setItems([]);
       return;
     }
+    // 1文字ごとに問い合わせないよう、入力が止まってから送る(無料枠の節約)
     timer.current = window.setTimeout(async () => {
+      if (!take("autocomplete")) return setItems([]);
       try {
         const r = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
           method: "POST",
@@ -47,7 +50,7 @@ export function PlaceInput({ apiKey, value, placeholder, label, onChange }: Prop
       } catch {
         setItems([]);
       }
-    }, 250);
+    }, 600);
     return () => window.clearTimeout(timer.current);
   }, [value, apiKey]);
 

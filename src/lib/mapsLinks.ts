@@ -24,3 +24,9 @@ export function legUrlByName(from: string, to: string, mode: Mode): string {
   const q = encodeURIComponent;
   return `https://www.google.com/maps/dir/?api=1&origin=${q(from)}&destination=${q(to)}&travelmode=${TRAVEL[mode]}`;
 }
+
+/** 地点をGoogleマップで開く(営業時間・口コミなどはGoogleマップ側で見る。APIを使わないので無料) */
+export function placeUrl(text: string, placeId?: string): string {
+  const id = placeId ? `&query_place_id=${encodeURIComponent(placeId)}` : "";
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(text)}${id}`;
+}

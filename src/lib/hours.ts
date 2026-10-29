@@ -1,3 +1,5 @@
+import { capMessage, take } from "./quota";
+
 /** Places API (New) の regularOpeningHours.periods。day は 0=日曜 */
 export interface Period {
   open: { day: number; hour: number; minute: number };
@@ -46,6 +48,7 @@ export async function fetchHours(apiKey: string, placeId: string): Promise<Perio
   }
   const hit = cache[placeId];
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.p;
+  if (!take("hours")) throw new Error(capMessage("hours"));
   const r = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`, {
     headers: { "X-Goog-Api-Key": apiKey, "X-Goog-FieldMask": "regularOpeningHours" },
   });

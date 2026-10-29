@@ -1,6 +1,7 @@
 import type { LegResult, LatLng, Mode, Stop } from "../types";
 import { decodePolyline } from "./polyline";
 import { nextDepart, type StopRule } from "./schedule";
+import { capMessage, take, type Sku } from "./quota";
 
 interface LatLngObj {
   latitude: number;
@@ -118,6 +119,9 @@ export async function fetchLeg(apiKey: string, from: Stop, to: Stop, departure?:
   const ref = (s: Stop): PlaceRef => (s.latLng ? { latLng: s.latLng } : s.placeId ? { placeId: s.placeId } : { address: s.text });
   // 過去・直近の時刻を渡すとAPIがエラーを返すため、その場合は「いま」として省略する
   const dep = departure && departure.getTime() > Date.now() + 60_000 ? departure : undefined;
+  // 1リクエストは使った機能のうち最も高い区分で課金される
+  const sku: Sku = mode === "DRIVE" ? (opts.tolls ? "routesEnt" : "routesPro") : "routesEss";
+  if (!take(sku)) return { ok: false, mode, error: capMessage(sku) };
   try {
     const r = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
       method: "POST",
@@ -159,6 +163,7 @@ export async function searchFrom(apiKey: string, stops: Stop[], start: Date, rul
  */
 export async function optimizeOrder(apiKey: string, stops: Stop[]): Promise<number[] | string> {
   if (!apiKey) return "APIキーが未設定です";
+  if (!take("routesPro")) return capMessage("routesPro");
   const ref = (s: Stop) => waypoint(s.latLng ? { latLng: s.latLng } : s.placeId ? { placeId: s.placeId } : { address: s.text });
   try {
     const r = await fetch("https://routes.googleapis.com/directions/v2:computeRoutes", {
