@@ -528,7 +528,7 @@ export function App() {
           </section>
         )}
 
-        <section className="block" data-mark="ROUTE">
+        <section className="block">
           <h2>
             <span className="num">01</span>ROUTE
             <button className="link" onClick={() => { setStops(samplePreset()); resetResult(); }} title="上野駅→上野公園(30分)→東京駅→皇居外苑">
@@ -710,7 +710,7 @@ export function App() {
           {notice && legs.length === 0 && <p className="note hi">{notice}</p>}
         </section>
 
-        <section className="block" data-mark="TIMING">
+        <section className="block">
           <h2><span className="num">02</span>TIMING</h2>
           <div className="seg">
             {(
@@ -736,7 +736,7 @@ export function App() {
         </button>
 
         {legs.length > 0 && (
-          <section className="result" data-mark="RESULT">
+          <section className="result">
             <div className="hud">
               <div className="hud-label">TOTAL MOVING</div>
               <div className="hud-time">{formatDuration(totalSec)}</div>
