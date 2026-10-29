@@ -490,3 +490,4 @@ h2::after { border-top: 1px solid var(--ink); opacity: .25; }
 .hud .chip.bad { color: #ff7d8f; border-color: #ff7d8f; }
 .share-plan { background: transparent; color: var(--gold2); border-color: var(--gold); }
 input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(201,162,39,.2); }
+.nav-test { word-break: break-all; }

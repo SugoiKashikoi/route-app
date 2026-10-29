@@ -5,6 +5,7 @@ import { DateTimeField, TimeField } from "./TimeFields";
 import { formatClock, formatDistance, formatDuration, toLocalInput } from "./lib/format";
 import { legUrl, legUrlByName, navigateFromHereUrl, placeUrl } from "./lib/mapsLinks";
 import { loadUsage, SKU, type Sku } from "./lib/quota";
+import { loadNavitimeKey, saveNavitimeKey, testNavitime } from "./lib/navitime";
 import { optimizeOrder, searchAll, searchFrom } from "./lib/routes";
 import { fetchHours, hoursWarning } from "./lib/hours";
 import { dayKey, eventDays, parseIcs, type CalEvent } from "./lib/ics";
@@ -118,6 +119,8 @@ export function App() {
   const [step, setStep] = useState(0);
   const [apiKey, setApiKey] = useState(loadApiKey);
   const [car, setCar] = useState<CarSettings>(loadCar);
+  const [navKey, setNavKey] = useState(loadNavitimeKey);
+  const [navTest, setNavTest] = useState("");
   const updateCar = (patch: CarSettings) => {
     const c = { ...car, ...patch };
     setCar(c);
@@ -445,6 +448,32 @@ export function App() {
                 </li>
               ))}
             </ul>
+            <h2>TRANSIT (試験)</h2>
+            <input
+              type="password"
+              autoComplete="off"
+              placeholder="NAVITIME(RapidAPI)のキー"
+              aria-label="NAVITIMEのキー"
+              value={navKey}
+              onChange={(e) => {
+                setNavKey(e.target.value);
+                saveNavitimeKey(e.target.value);
+              }}
+            />
+            <div className="stop-opts">
+              <button
+                className="mini-btn"
+                disabled={!navKey}
+                onClick={async () => {
+                  setNavTest("テスト中…");
+                  setNavTest(await testNavitime(navKey.trim()));
+                }}
+              >
+                接続テスト(岡山駅→倉敷駅・1回分を使用)
+              </button>
+            </div>
+            {navTest && <p className="note hi nav-test">{navTest}</p>}
+            <p className="note">電車の所要時間を自動で取れるか試すための欄です。結果をそのまま開発者に送ってください。まだ検索には使いません。</p>
             <h2>OPTION</h2>
             <label className="check">
               <input type="checkbox" checked={!!car.tolls} onChange={(e) => updateCar({ tolls: e.target.checked || undefined })} />
