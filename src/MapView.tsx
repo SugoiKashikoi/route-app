@@ -46,9 +46,10 @@ export function MapView({ apiKey, legs, visible }: Props) {
         const { Map } = (await google.maps.importLibrary("maps")) as google.maps.MapsLibrary;
         await google.maps.importLibrary("marker");
         map.current = new Map(el.current!, {
-          center: { lat: 34.66, lng: 133.92 },
-          zoom: 9,
+          center: { lat: 35.68, lng: 139.76 },
+          zoom: 11,
           mapId: "DEMO_MAP_ID",
+          colorScheme: "DARK",
           mapTypeControl: false,
           streetViewControl: false,
         });
@@ -86,7 +87,12 @@ export function MapView({ apiKey, legs, visible }: Props) {
     // 地点マーカー(A, B, C...)。区間の終点を使い、先頭だけ最初の区間の始点を使う
     const stopsPts = points.length ? [points[0], ...legs.flatMap((l) => (l.ok ? [l.end] : []))] : [];
     stopsPts.forEach((p, i) => {
-      const pin = new google.maps.marker.PinElement({ glyph: String.fromCharCode(65 + i) });
+      const pin = new google.maps.marker.PinElement({
+        glyph: String.fromCharCode(65 + i),
+        background: "#2f8cff",
+        borderColor: "#0b1a33",
+        glyphColor: "#ffffff",
+      });
       const marker = new google.maps.marker.AdvancedMarkerElement({ map: m, position: p, content: pin.element });
       overlays.current.push({ setMap: (x) => (marker.map = x) });
     });
@@ -103,7 +109,7 @@ export function MapView({ apiKey, legs, visible }: Props) {
       {status !== "ready" && (
         <div className="map-msg">
           {status === "loading" && "地図を読み込み中…"}
-          {status === "nokey" && "地図を表示するには、行程画面上部の「APIキー」を入力してください。"}
+          {status === "nokey" && "地図を表示するには、右上の「⚙ APIキー」でキーを入力してください。"}
           {status === "error" && message}
         </div>
       )}

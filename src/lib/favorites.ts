@@ -1,10 +1,10 @@
-import type { Mode, Stop } from "../types";
+import type { Stop } from "../types";
 
 /** お気に入り。ブラウザごと(localStorage)に保存し、コードやサーバーには置かない */
 export interface Favorite {
   id: string;
   name: string;
-  stops: { text: string; placeId?: string; modeToNext: Mode; dwellMin?: number }[];
+  stops: Omit<Stop, "id">[];
 }
 
 const KEY = "multimodal-route:favorites";
@@ -30,7 +30,7 @@ export function toFavorite(name: string, stops: Stop[]): Favorite {
   return {
     id: crypto.randomUUID(),
     name,
-    stops: stops.map(({ text, placeId, modeToNext, dwellMin }) => ({ text, placeId, modeToNext, dwellMin })),
+    stops: stops.map(({ id: _id, ...rest }) => rest),
   };
 }
 

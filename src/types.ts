@@ -15,6 +15,10 @@ export interface Stop {
   modeToNext: Mode;
   /** この地点での滞在(分)。経由地のみ有効 */
   dwellMin?: number;
+  /** この地点を出る時刻 "HH:MM"(早く着いたら待つ)。経由地のみ */
+  departAt?: string;
+  /** この地点に着きたい時刻 "HH:MM" */
+  arriveBy?: string;
 }
 
 export interface LatLng {

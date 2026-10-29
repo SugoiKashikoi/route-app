@@ -1,40 +1,73 @@
+/** 地点ごとの条件 */
+export interface StopRule {
+  /** 滞在(分) */
+  dwellMin: number;
+  /** この時刻より前には出発しない(早く着いたら待つ) */
+  departAt?: Date;
+  /** この時刻までに着きたい(余裕・遅れの判定に使う) */
+  arriveBy?: Date;
+}
+
 /** 地点ごとの到着・出発時刻。先頭は出発のみ、末尾は到着のみ */
 export interface StopTime {
   arrive?: Date;
   depart?: Date;
-  /** この地点での滞在(分) */
   dwellMin: number;
+  /** 出発時刻指定による待ち時間(分) */
+  waitMin: number;
+  /** 到着希望までの余裕(分)。マイナスは遅れ */
+  slackMin?: number;
 }
 
 const MIN = 60_000;
+
+/** 到着時刻と地点の条件から、その地点を出る時刻を決める */
+export function nextDepart(arriveMs: number, r: StopRule | undefined): number {
+  const ready = arriveMs + (r?.dwellMin ?? 0) * MIN;
+  return r?.departAt ? Math.max(ready, r.departAt.getTime()) : ready;
+}
 
 /**
  * 出発時刻から順に時刻を割り当てる。
  * durationsSec[i] は地点i→i+1の所要秒(取得失敗は null。以降の時刻は不明として空ける)
  */
-export function forwardSchedule(durationsSec: (number | null)[], dwellMin: number[], start: Date): StopTime[] {
+export function forwardSchedule(durationsSec: (number | null)[], rules: StopRule[], start: Date): StopTime[] {
   const n = durationsSec.length + 1;
-  const out: StopTime[] = [{ depart: start, dwellMin: 0 }];
+  const out: StopTime[] = [{ depart: start, dwellMin: 0, waitMin: 0 }];
   let t: number | undefined = start.getTime();
   for (let i = 1; i < n; i++) {
     const d = durationsSec[i - 1];
-    t = t === undefined || d === null ? undefined : t + d * 1000;
+    const r = rules[i];
+    const arrive: number | undefined = t === undefined || d === null ? undefined : t + d * 1000;
     const last = i === n - 1;
-    const dwell = last ? 0 : dwellMin[i] ?? 0;
+    const depart: number | undefined = arrive === undefined || last ? undefined : nextDepart(arrive, r);
+    const dwellMin = last ? 0 : r?.dwellMin ?? 0;
     out.push({
-      arrive: t === undefined ? undefined : new Date(t),
-      depart: t === undefined || last ? undefined : new Date(t + dwell * MIN),
-      dwellMin: dwell,
+      arrive: arrive === undefined ? undefined : new Date(arrive),
+      depart: depart === undefined ? undefined : new Date(depart),
+      dwellMin,
+      waitMin: arrive === undefined || depart === undefined ? 0 : Math.round((depart - arrive) / MIN) - dwellMin,
+      slackMin: arrive !== undefined && r?.arriveBy ? Math.floor((r.arriveBy.getTime() - arrive) / MIN) : undefined,
     });
-    if (t !== undefined && !last) t += dwell * MIN;
+    t = depart;
   }
   return out;
 }
 
-/** 到着時刻から逆算した出発時刻。所要が不明な区間があれば null */
-export function startForArrival(durationsSec: (number | null)[], dwellMin: number[], arrival: Date): Date | null {
+/** 到着時刻から逆算した出発時刻(滞在のみ考慮)。所要が不明な区間があれば null */
+export function startForArrival(durationsSec: (number | null)[], rules: StopRule[], arrival: Date): Date | null {
   if (durationsSec.some((d) => d === null)) return null;
   const moveSec = (durationsSec as number[]).reduce((a, d) => a + d, 0);
-  const dwell = dwellMin.slice(1, durationsSec.length).reduce((a, m) => a + (m ?? 0), 0);
+  const dwell = rules.slice(1, durationsSec.length).reduce((a, r) => a + (r?.dwellMin ?? 0), 0);
   return new Date(arrival.getTime() - moveSec * 1000 - dwell * MIN);
+}
+
+/** "HH:MM" を基準時刻以降の最初のその時刻に変換(基準より前なら翌日) */
+export function resolveClock(hhmm: string | undefined, base: Date): Date | undefined {
+  const m = hhmm?.match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return undefined;
+  const d = new Date(base);
+  d.setHours(Number(m[1]), Number(m[2]), 0, 0);
+  if (d.getTime() < base.getTime() - 12 * 3600_000) d.setDate(d.getDate() + 1);
+  return d;
 }

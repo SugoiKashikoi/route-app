@@ -1,5 +1,6 @@
 import type { LegResult, LatLng, Mode, Stop } from "../types";
 import { decodePolyline } from "./polyline";
+import { nextDepart, type StopRule } from "./schedule";
 
 interface LatLngObj {
   latitude: number;
@@ -90,13 +91,13 @@ export function searchAll(apiKey: string, stops: Stop[]): Promise<LegResult[]> {
 }
 
 /** 出発時刻つきで順番に取得(前の区間の到着+滞在が次の出発時刻になるため並列にできない) */
-export async function searchFrom(apiKey: string, stops: Stop[], start: Date): Promise<LegResult[]> {
+export async function searchFrom(apiKey: string, stops: Stop[], start: Date, rules: StopRule[]): Promise<LegResult[]> {
   const out: LegResult[] = [];
   let t: number | undefined = start.getTime();
   for (let i = 0; i < stops.length - 1; i++) {
     const leg = await fetchLeg(apiKey, stops[i], stops[i + 1], t === undefined ? undefined : new Date(t));
     out.push(leg);
-    t = t === undefined || !leg.ok ? undefined : t + leg.durationSec * 1000 + (stops[i + 1].dwellMin ?? 0) * 60_000;
+    t = t === undefined || !leg.ok ? undefined : nextDepart(t + leg.durationSec * 1000, rules[i + 1]);
   }
   return out;
 }

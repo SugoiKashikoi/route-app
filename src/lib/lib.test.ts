@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatClock, formatDuration, formatDistance, toLocalInput } from "./format";
-import { forwardSchedule, startForArrival } from "./schedule";
+import { forwardSchedule, resolveClock, startForArrival, type StopRule } from "./schedule";
 import { decodeFavorite, encodeFavorite, toFavorite } from "./favorites";
 
 describe("favorites", () => {
@@ -84,9 +84,25 @@ describe("links / request", () => {
 
 describe("schedule", () => {
   const start = new Date(2026, 9, 29, 9, 0);
+  const r = (...dwell: number[]): StopRule[] => dwell.map((dwellMin) => ({ dwellMin }));
+  it("出発時刻指定は早く着いたら待つ、到着希望は余裕/遅れを出す", () => {
+    // A 9:00発 → B 10:00着、Bは10:30発指定 → C 10:50着(10:45までに着きたい)
+    const rules: StopRule[] = [{ dwellMin: 0 }, { dwellMin: 10, departAt: resolveClock("10:30", start) }, { dwellMin: 0, arriveBy: resolveClock("10:45", start) }];
+    const s = forwardSchedule([3600, 1200], rules, start);
+    expect(formatClock(s[1].depart!)).toBe("10:30");
+    expect(s[1].waitMin).toBe(20);
+    expect(formatClock(s[2].arrive!)).toBe("10:50");
+    expect(s[2].slackMin).toBe(-5);
+  });
+  it("時刻は日付をまたぐと翌日に解釈", () => {
+    const late = new Date(2026, 9, 29, 22, 0);
+    expect(resolveClock("0:30", late)!.getDate()).toBe(30);
+    expect(resolveClock("23:00", late)!.getDate()).toBe(29);
+    expect(resolveClock("", late)).toBeUndefined();
+  });
   it("滞在を挟んで順に時刻を割り当てる", () => {
     // A→B 60分, Bで30分滞在, B→C 20分
-    const s = forwardSchedule([3600, 1200], [0, 30, 0], start);
+    const s = forwardSchedule([3600, 1200], r(0, 30, 0), start);
     expect(formatClock(s[0].depart!)).toBe("9:00");
     expect(formatClock(s[1].arrive!)).toBe("10:00");
     expect(formatClock(s[1].depart!)).toBe("10:30");
@@ -94,15 +110,15 @@ describe("schedule", () => {
     expect(s[2].depart).toBeUndefined();
   });
   it("取得失敗の区間以降は時刻不明", () => {
-    const s = forwardSchedule([3600, null, 600], [0, 0, 0, 0], start);
+    const s = forwardSchedule([3600, null, 600], r(0, 0, 0, 0), start);
     expect(s[1].arrive).toBeDefined();
     expect(s[2].arrive).toBeUndefined();
     expect(s[3].arrive).toBeUndefined();
   });
   it("到着時刻から出発時刻を逆算", () => {
     const arr = new Date(2026, 9, 29, 12, 0);
-    expect(formatClock(startForArrival([3600, 1200], [0, 30, 0], arr)!)).toBe("10:10");
-    expect(startForArrival([3600, null], [0, 0, 0], arr)).toBeNull();
+    expect(formatClock(startForArrival([3600, 1200], r(0, 30, 0), arr)!)).toBe("10:10");
+    expect(startForArrival([3600, null], r(0, 0, 0), arr)).toBeNull();
   });
   it("日付またぎは「翌」", () => {
     expect(formatClock(new Date(2026, 9, 30, 0, 15), start)).toBe("翌 0:15");
