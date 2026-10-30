@@ -96,10 +96,22 @@ const hm = (d: Date) => `${p2(d.getHours())}:${p2(d.getMinutes())}`;
 /** "YYYYMMDD" の0時(端末の時間帯。日本での利用を想定) */
 const midnight = (s: string) => new Date(Number(s.slice(0, 4)), Number(s.slice(4, 6)) - 1, Number(s.slice(6, 8))).getTime();
 
-/** API の結果を区間結果に変換。所要は「出発可能時刻→到着」で、発車待ちを含む(時刻計算で二重に数えない) */
-export function journeyToLeg(plan: PlanResponse, ready: Date): LegResult {
-  const j = plan.journeys?.[0];
-  if (!j) return { ok: false, mode: "TRANSIT", error: "公共交通の経路が見つかりませんでした" };
+const usesShinkansen = (j: Journey) => j.legs.some((l) => l.kind === "transit" && /新幹線/.test(l.routeName ?? ""));
+
+/**
+ * API の結果を区間結果に変換。候補のうち最も早く着くものを選ぶ(新幹線を使わない設定なら新幹線を含む候補を除く)。
+ * 所要は「出発可能時刻→到着」で、発車待ちを含む(時刻計算で二重に数えない)
+ */
+export function journeyToLeg(plan: PlanResponse, ready: Date, shinkansen = false): LegResult {
+  const all = plan.journeys ?? [];
+  const usable = shinkansen ? all : all.filter((x) => !usesShinkansen(x));
+  const j = usable.reduce<Journey | undefined>((best, x) => (!best || x.arrivalSecs < best.arrivalSecs ? x : best), undefined);
+  if (!j)
+    return {
+      ok: false,
+      mode: "TRANSIT",
+      error: all.length ? "新幹線を使わない経路が見つかりませんでした(「🚄 新幹線も使う」をオンにすると候補に入ります)" : "公共交通の経路が見つかりませんでした",
+    };
   const base = midnight(plan.date);
   const at = (secs: number) => base + secs * 1000; // 24時以降の秒数は翌日になる
   const departAt = at(j.departureSecs);
@@ -143,9 +155,10 @@ export async function searchTransit(from: Stop, to: Stop, ready: Date): Promise<
       date: ymd(ready),
       time: hm(ready),
       type: "departure",
-      numItineraries: "3",
+      // 新幹線あり/なしの両方から選べるよう、候補を多めに取る(上限6)
+      numItineraries: "6",
     });
-    return journeyToLeg(plan, ready);
+    return journeyToLeg(plan, ready, !!from.shinkansen);
   } catch (e) {
     return { ok: false, mode: "TRANSIT", error: `公共交通を自動検索できませんでした(${e instanceof Error ? e.message : String(e)})` };
   }

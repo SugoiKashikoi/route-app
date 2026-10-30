@@ -693,6 +693,16 @@ export function App() {
                         />
                         分
                       </label>
+                      {opts.transitAuto && (
+                        <button
+                          className={`mini-btn ${s.shinkansen ? "on" : ""}`}
+                          aria-pressed={!!s.shinkansen}
+                          aria-label={`${label(i)}→${label(i + 1)}で新幹線も使う`}
+                          onClick={() => update(i, { shinkansen: !s.shinkansen || undefined })}
+                        >
+                          🚄 新幹線も使う
+                        </button>
+                      )}
                       <a className="mini-link" href={legUrlByName(s.text || "現在地", stops[i + 1]?.text ?? "", "TRANSIT")} target="_blank" rel="noreferrer">
                         Googleマップで乗換を調べる
                       </a>

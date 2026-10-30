@@ -326,3 +326,26 @@ describe("公共交通の自動検索(Transit API。モックのみ、実通信�
     }
   });
 });
+
+describe("新幹線のオン・オフ(モック)", () => {
+  const leg = (name: string, dep: number, arr: number) => ({ kind: "transit", routeName: name, from: { name: "岡山" }, to: { name: "新大阪" }, departureSecs: dep, arrivalSecs: arr });
+  const plan = {
+    date: "20261102",
+    journeys: [
+      { departureSecs: 36000, arrivalSecs: 39000, durationSecs: 3000, transferCount: 0, legs: [leg("山陽新幹線", 36000, 39000)] },
+      { departureSecs: 36000, arrivalSecs: 45000, durationSecs: 9000, transferCount: 1, legs: [leg("山陽本線", 36000, 45000)] },
+    ],
+  };
+  it("オフなら新幹線を含む候補を除き、オンなら最も早く着く候補", () => {
+    const ready = new Date(2026, 10, 2, 9, 55);
+    const off = journeyToLeg(plan as never, ready, false);
+    const on = journeyToLeg(plan as never, ready, true);
+    if (!off.ok || !on.ok) throw new Error("ng");
+    expect(off.transit?.segments[0].name).toBe("山陽本線");
+    expect(on.transit?.segments[0].name).toBe("山陽新幹線");
+  });
+  it("新幹線しかない区間でオフならその旨を伝える", () => {
+    const only = { ...plan, journeys: [plan.journeys[0]] };
+    expect(journeyToLeg(only as never, new Date(2026, 10, 2, 9, 55), false)).toMatchObject({ ok: false });
+  });
+});
