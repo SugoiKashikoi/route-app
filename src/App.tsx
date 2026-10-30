@@ -7,6 +7,7 @@ import { legUrl, legUrlByName, navigateFromHereUrl, placeUrl } from "./lib/mapsL
 import { loadUsage, SKU, type Sku } from "./lib/quota";
 import { loadNavitimeKey, saveNavitimeKey, testNavitime } from "./lib/navitime";
 import { testTransitApi } from "./lib/transitApiTest";
+import { TRANSIT_ATTRIBUTION } from "./lib/transit";
 import { optimizeOrder, searchAll, searchFrom } from "./lib/routes";
 import { fetchHours, hoursWarning } from "./lib/hours";
 import { dayKey, eventDays, parseIcs, type CalEvent } from "./lib/ics";
@@ -216,7 +217,9 @@ export function App() {
     });
 
   const ready = stops.every((s) => s.text.trim());
-  const opts = { tolls: car.tolls };
+  const opts = { tolls: car.tolls, transitAuto: car.transitAuto !== false };
+  /** 公共交通を自動検索する区間があれば、前の区間の到着時刻から順に検索する(発車時刻を正しく拾うため) */
+  const hasAutoTransit = opts.transitAuto && stops.slice(0, -1).some((s) => s.modeToNext === "TRANSIT");
   /** 地点ごとの営業時間の警告(設定でオンのときだけ取得) */
   const [hoursWarn, setHoursWarn] = useState<(string | undefined)[]>([]);
   const [calEvents, setCalEvents] = useState<CalEvent[]>([]);
@@ -313,7 +316,7 @@ export function App() {
     } else {
       if (timeMode === "depart") msg = "過去の時刻のため、いま出発として計算しました。";
       // 地点ごとの出発時刻があると次の区間の出発時刻が変わるので、順番に取得する
-      res = rules.some((r) => r.departAt) ? await searchFrom(apiKey, stops, now, rules, opts) : await searchAll(apiKey, stops, opts);
+      res = rules.some((r) => r.departAt) || hasAutoTransit ? await searchFrom(apiKey, stops, now, rules, opts) : await searchAll(apiKey, stops, opts);
     }
 
     const sched = forwardSchedule(durations(res), rules, start);
@@ -492,6 +495,10 @@ export function App() {
             {navTest && <p className="note hi nav-test">{navTest}</p>}
             <p className="note">電車の所要時間を自動で取れるか試すための欄です。結果をそのまま開発者に送ってください。まだ検索には使いません。</p>
             <h2>OPTION</h2>
+            <label className="check">
+              <input type="checkbox" checked={car.transitAuto !== false} onChange={(e) => updateCar({ transitAuto: e.target.checked ? undefined : false })} />
+              公共交通(電車・バス)を自動検索(Transit API・無料・キー不要。取れないときは「所要◯分」の手入力を使います)
+            </label>
             <label className="check">
               <input type="checkbox" checked={!!car.tolls} onChange={(e) => updateCar({ tolls: e.target.checked || undefined })} />
               高速代を表示(無料枠が月1,000回と少ない区分。オフでも各区間の「Googleマップ」で料金を見られます)
@@ -673,7 +680,7 @@ export function App() {
                   {!last && s.modeToNext === "TRANSIT" && (
                     <div className="stop-opts fixed-opts">
                       <label className="mini">
-                        所要
+                        {opts.transitAuto ? "自動検索できないときの所要" : "所要"}
                         <input
                           type="number"
                           inputMode="numeric"
@@ -832,6 +839,13 @@ export function App() {
                           <span className="mono">{clock(schedule[i]?.depart)} → {clock(schedule[i + 1]?.arrive)}</span>
                           {l.mode !== "FIXED" && !l.manual && <span>{formatDistance(l.distanceMeters)}</span>}
                           {l.manual && <span>手入力</span>}
+                          {l.transit && (
+                            <span>
+                              {formatClock(new Date(l.transit.departAt), startAt)}発 / 乗換{l.transit.transferCount}回
+                              {l.transit.fareYen !== undefined && ` / ¥${l.transit.fareYen.toLocaleString()}`}
+                              {l.transit.waitSec >= 60 && ` / 待ち${formatDuration(l.transit.waitSec)}`}
+                            </span>
+                          )}
                           {l.mode === "DRIVE" && fuel !== null && <span>⛽ 約{formatYen(fuelCost(l.distanceMeters, car)!)}</span>}
                           {l.tollYen !== undefined && <span>🛣 約{formatYen(l.tollYen)}</span>}
                           {l.tollUnknown && <span>🛣 有料道路あり(金額不明)</span>}
@@ -839,6 +853,25 @@ export function App() {
                             <a href={legUrl(l.start, l.end, l.mode)} target="_blank" rel="noreferrer">Googleマップ</a>
                           )}
                         </div>
+                        {l.transit && (
+                          <details className="transit-detail">
+                            <summary>乗換の詳細</summary>
+                            <ol>
+                              {l.transit.segments.map((g, k) => (
+                                <li key={k} className={g.kind}>
+                                  <span className="mono">{formatClock(new Date(g.departAt), startAt)}–{formatClock(new Date(g.arriveAt), startAt)}</span>
+                                  <b>{g.name}</b>
+                                  <span>{g.from} → {g.to}</span>
+                                </li>
+                              ))}
+                            </ol>
+                            <p className="note">
+                              時刻表に基づく検索結果(Transit API)。
+                              {l.transit.fareIcYen !== undefined && `IC運賃 ¥${l.transit.fareIcYen.toLocaleString()}。`}
+                              {stops[i].transitMin ? `手入力の${stops[i].transitMin}分は自動検索できなかったときに使います。` : ""}
+                            </p>
+                          </details>
+                        )}
                       </div>
                     ) : (
                       <>
@@ -897,6 +930,7 @@ export function App() {
               ))}
             </ol>
             <p className="note">
+              {legs.some((l) => l.ok && l.transit) && <>{TRANSIT_ATTRIBUTION}<br /></>}
               ※「Googleマップ」は端点と移動手段を渡すだけで、Googleマップ側が経路を再計算します。ここに表示した経路と完全に同じになる保証はありません。
               ナビ開始ボタンはiPhoneのGoogleマップアプリで現在地を出発地としてナビを始めます。車区間はiPhoneをCarPlayに接続していればCarPlayに表示されます。このアプリ自体はCarPlayには表示されません。
             </p>

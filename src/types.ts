@@ -1,3 +1,5 @@
+import type { TransitDetails } from "./lib/transit";
+
 /** FIXED は新幹線・飛行機など発着時刻が決まっている区間(APIを使わず、入力した時刻で計算) */
 export type Mode = "DRIVE" | "WALK" | "BICYCLE" | "TRANSIT" | "FIXED";
 
@@ -45,5 +47,5 @@ export interface LatLng {
 export type LegResult =
   // FIXED は両端の座標が前後の区間から分かったときだけ start/end が入る
   // tollYen は高速代の取得を有効にした車区間のみ。tollUnknown は有料道路を通るが金額が出なかったとき
-  | { ok: true; mode: Mode; distanceMeters: number; durationSec: number; path: LatLng[]; start?: LatLng; end?: LatLng; tollYen?: number; tollUnknown?: boolean; manual?: boolean }
+  | { ok: true; mode: Mode; distanceMeters: number; durationSec: number; path: LatLng[]; start?: LatLng; end?: LatLng; tollYen?: number; tollUnknown?: boolean; manual?: boolean; transit?: TransitDetails }
   | { ok: false; mode: Mode; error: string };

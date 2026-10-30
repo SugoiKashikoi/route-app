@@ -8,6 +8,8 @@ export interface CarSettings {
   tolls?: boolean;
   /** 立ち寄り先の営業時間を確認する(Places API の Enterprise 料金) */
   hours?: boolean;
+  /** false のとき公共交通の自動検索をしない(既定はオン) */
+  transitAuto?: boolean;
 }
 
 const KEY = "multimodal-route:car";

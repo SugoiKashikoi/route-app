@@ -10,6 +10,7 @@ import { hoursWarning, isOpenAt, type Period } from "./hours";
 import { parseIcs, parseIcsDate } from "./ics";
 import { SKU, take } from "./quota";
 import { buildOptimizeRequest, fetchLeg } from "./routes";
+import { journeyToLeg, placeQueries } from "./transit";
 import { decodeFavorite, encodeFavorite, toFavorite } from "./favorites";
 
 describe("favorites", () => {
@@ -274,5 +275,54 @@ describe("公共交通の手入力", () => {
   it("所要を入れた公共交通はAPIを使わずその時間で計算", async () => {
     const leg = await fetchLeg("", { id: "1", text: "上野", modeToNext: "TRANSIT", transitMin: 12 }, { id: "2", text: "東京", modeToNext: "WALK" });
     expect(leg).toMatchObject({ ok: true, durationSec: 720, manual: true });
+  });
+});
+
+describe("公共交通の自動検索(Transit API。モックのみ、実通信ではない)", () => {
+  const plan = {
+    date: "20261102",
+    journeys: [
+      {
+        departureSecs: 10 * 3600 + 5 * 60,
+        arrivalSecs: 10 * 3600 + 22 * 60,
+        durationSecs: 17 * 60,
+        transferCount: 0,
+        fare: { currency: "JPY", ticket: 330, ic: 330 },
+        legs: [
+          { kind: "walk", from: { name: "出発地" }, to: { name: "岡山" }, departureSecs: 36000, arrivalSecs: 36300, distanceMeters: 300 },
+          { kind: "transit", routeName: "山陽本線", headsign: "三原", mode: "rail", from: { name: "岡山" }, to: { name: "倉敷" }, departureSecs: 36300, arrivalSecs: 37320 },
+        ],
+      },
+    ],
+  };
+  it("発車待ちを含めて「出発可能時刻→到着」を所要にする", () => {
+    const ready = new Date(2026, 10, 2, 9, 50);
+    const leg = journeyToLeg(plan as never, ready);
+    expect(leg).toMatchObject({ ok: true, durationSec: 32 * 60, distanceMeters: 300 });
+    if (!leg.ok || !leg.transit) throw new Error("no transit");
+    expect(leg.transit).toMatchObject({ waitSec: 15 * 60, transferCount: 0, fareYen: 330 });
+    expect(new Date(leg.transit.arriveAt).getHours()).toBe(10);
+    expect(leg.transit.segments[1].name).toBe("山陽本線 三原行");
+  });
+  it("24時以降の秒数は翌日", () => {
+    const late = { date: "20261102", journeys: [{ ...plan.journeys[0], departureSecs: 24 * 3600 + 600, arrivalSecs: 24 * 3600 + 1200, legs: [] }] };
+    const leg = journeyToLeg(late as never, new Date(2026, 10, 2, 23, 50));
+    if (!leg.ok || !leg.transit) throw new Error("no transit");
+    expect(new Date(leg.transit.departAt).getDate()).toBe(3);
+  });
+  it("住所つきの地点名から検索語を作る", () => {
+    expect(placeQueries("日本、〒700-0024 岡山県岡山市北区駅元町1-1 岡山駅")).toEqual(["岡山県岡山市北区駅元町1-1 岡山駅", "岡山駅"]);
+  });
+  it("通信に失敗したら手入力の分数に戻す", async () => {
+    const orig = globalThis.fetch;
+    globalThis.fetch = (() => Promise.reject(new TypeError("Load failed"))) as typeof fetch;
+    try {
+      const a = { id: "1", text: "岡山駅X", modeToNext: "TRANSIT" as const, transitMin: 20 };
+      const b = { id: "2", text: "倉敷駅X", modeToNext: "WALK" as const };
+      expect(await fetchLeg("", a, b, undefined, { transitAuto: true })).toMatchObject({ ok: true, manual: true, durationSec: 1200 });
+      expect(await fetchLeg("", { ...a, transitMin: undefined }, b, undefined, { transitAuto: true })).toMatchObject({ ok: false });
+    } finally {
+      globalThis.fetch = orig;
+    }
   });
 });

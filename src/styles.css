@@ -367,3 +367,8 @@ h2::after { height: 2px; background: repeating-linear-gradient(90deg, var(--acce
 }
 .nav-test { word-break: break-all; }
 .nav-test { white-space: pre-wrap; max-height: 320px; overflow: auto; }
+.transit-detail { margin-top: 6px; font-size: 12px; }
+.transit-detail summary { cursor: pointer; color: var(--accent); }
+.transit-detail ol { list-style: none; padding: 0; margin: 6px 0; }
+.transit-detail li { display: flex; flex-wrap: wrap; gap: 4px 8px; padding: 3px 0; border-bottom: 1px dashed var(--line); }
+.transit-detail li.walk b { color: var(--sub); font-weight: 500; }
