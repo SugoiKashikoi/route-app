@@ -439,6 +439,7 @@ export function App() {
                 円/L
               </label>
             </div>
+            <p className="note">版: {__BUILD__}(更新が反映されないときはページを再読み込み)</p>
             <p className="note">入力すると、車の区間のガソリン代の目安を表示します(距離÷燃費×単価。高速代は含みません)。</p>
             <h2>FREE</h2>
             <p className="note">
