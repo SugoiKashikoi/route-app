@@ -278,6 +278,9 @@ describe("公共交通の手入力", () => {
   });
 });
 
+/** 日本時間の 2026-11-02 h:m(端末の時間帯に依存しない) */
+const jst = (h: number, m: number) => new Date(`2026-11-02T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00+09:00`);
+
 describe("公共交通の自動検索(Transit API。モックのみ、実通信ではない)", () => {
   const plan = {
     date: "20261102",
@@ -296,23 +299,23 @@ describe("公共交通の自動検索(Transit API。モックのみ、実通信�
     ],
   };
   it("発車待ちを含めて「出発可能時刻→到着」を所要にする", () => {
-    const ready = new Date(2026, 10, 2, 9, 50);
+    const ready = jst(9, 50);
     const leg = journeyToLeg(plan as never, ready);
     expect(leg).toMatchObject({ ok: true, durationSec: 32 * 60, distanceMeters: 300 });
     if (!leg.ok || !leg.transit) throw new Error("no transit");
     expect(leg.transit).toMatchObject({ waitSec: 15 * 60, transferCount: 0, fareYen: 330 });
-    expect(new Date(leg.transit.arriveAt).getHours()).toBe(10);
+    expect(leg.transit.arriveAt).toBe(jst(10, 22).getTime());
     expect(leg.transit.segments[1].name).toBe("山陽本線 三原行");
   });
   it("24時以降の秒数は翌日", () => {
     const late = { date: "20261102", journeys: [{ ...plan.journeys[0], departureSecs: 24 * 3600 + 600, arrivalSecs: 24 * 3600 + 1200, legs: [] }] };
-    const leg = journeyToLeg(late as never, new Date(2026, 10, 2, 23, 50));
+    const leg = journeyToLeg(late as never, jst(23, 50));
     if (!leg.ok || !leg.transit) throw new Error("no transit");
-    expect(new Date(leg.transit.departAt).getDate()).toBe(3);
+    expect(leg.transit.departAt).toBe(Date.parse("2026-11-03T00:10:00+09:00"));
   });
   it("駅までと駅からの徒歩(access/egress)を所要と時刻に含める", () => {
     const p = { date: "20261102", journeys: [{ ...plan.journeys[0], departureSecs: 36000, arrivalSecs: 37000, accessWalkSecs: 120, egressWalkSecs: 60, legs: [plan.journeys[0].legs[1]] }] };
-    const ready = new Date(2026, 10, 2, 9, 50);
+    const ready = jst(9, 50);
     const leg = journeyToLeg(p as never, ready);
     if (!leg.ok || !leg.transit) throw new Error("no transit");
     expect(leg.durationSec).toBe(37060 - 35400);
@@ -346,7 +349,7 @@ describe("新幹線のオン・オフ(モック)", () => {
     ],
   };
   it("オフなら新幹線を含む候補を除き、オンなら最も早く着く候補", () => {
-    const ready = new Date(2026, 10, 2, 9, 55);
+    const ready = jst(9, 55);
     const off = journeyToLeg(plan as never, ready, false);
     const on = journeyToLeg(plan as never, ready, true);
     if (!off.ok || !on.ok) throw new Error("ng");
@@ -355,7 +358,7 @@ describe("新幹線のオン・オフ(モック)", () => {
   });
   it("新幹線しかない区間でオフならその旨を伝える", () => {
     const only = { ...plan, journeys: [plan.journeys[0]] };
-    expect(journeyToLeg(only as never, new Date(2026, 10, 2, 9, 55), false)).toMatchObject({ ok: false });
+    expect(journeyToLeg(only as never, jst(9, 55), false)).toMatchObject({ ok: false });
   });
 });
 
@@ -371,5 +374,53 @@ describe("新幹線・飛行機で時刻が空のとき", () => {
     } finally {
       globalThis.fetch = orig;
     }
+  });
+});
+
+describe("Codexレビューの指摘の再現テスト", () => {
+  const j = (dep: number, arr: number, access = 0) => ({ departureSecs: dep, arrivalSecs: arr, durationSecs: arr - dep, transferCount: 0, accessWalkSecs: access, legs: [] });
+  it("出発可能時刻より前に歩き出す必要がある便は選ばない", () => {
+    // 出発可能 10:00:30、10:00発・駅まで2分 → 乗れない。10:20発を選ぶ
+    const plan = { date: "20261102", journeys: [j(36000, 37000, 120), j(37200, 38000, 120)] };
+    const leg = journeyToLeg(plan as never, new Date(jst(10, 0).getTime() + 30_000));
+    if (!leg.ok || !leg.transit) throw new Error("ng");
+    expect(leg.transit.departAt).toBe(jst(10, 18).getTime());
+    expect(journeyToLeg({ date: "20261102", journeys: [j(36000, 37000, 120)] } as never, jst(10, 0))).toMatchObject({ ok: false });
+  });
+  it("前の区間が失敗したら時刻表検索をせず、手入力があればそれを使う", async () => {
+    const a = { id: "1", text: "x", modeToNext: "TRANSIT" as const };
+    const b = { id: "2", text: "y", modeToNext: "WALK" as const };
+    expect(await fetchLeg("", a, b, undefined, { transitAuto: true }, true)).toMatchObject({ ok: false });
+    expect(await fetchLeg("", { ...a, transitMin: 15 }, b, undefined, { transitAuto: true }, true)).toMatchObject({ ok: true, manual: true });
+  });
+  it("夜に出ても宿泊明けは翌朝(翌々朝にならない)", () => {
+    const base = new Date(2026, 10, 2, 22, 0);
+    const stops: Stop[] = [
+      { id: "1", text: "A", modeToNext: "DRIVE" },
+      { id: "2", text: "B", modeToNext: "DRIVE", overnight: true },
+      { id: "3", text: "C", modeToNext: "DRIVE" },
+    ];
+    expect(buildRules(stops, base)[1].departAt).toEqual(new Date(2026, 10, 3, 9, 0));
+  });
+  it("前の区間が不明でも宿泊明けから時刻を再開する", () => {
+    const base = new Date(2026, 10, 2, 8, 0);
+    const stops: Stop[] = [
+      { id: "1", text: "A", modeToNext: "DRIVE" },
+      { id: "2", text: "B", modeToNext: "DRIVE", overnight: true },
+      { id: "3", text: "C", modeToNext: "DRIVE" },
+    ];
+    const t = forwardSchedule([null, 3600], buildRules(stops, base), base);
+    expect(t[1].depart).toEqual(new Date(2026, 10, 3, 9, 0));
+    expect(t[2].arrive).toEqual(new Date(2026, 10, 3, 10, 0));
+  });
+  it("先頭が時刻指定の便なら、その発車時刻から計算する", () => {
+    const base = new Date(2026, 10, 2, 9, 0);
+    const stops: Stop[] = [
+      { id: "1", text: "A", modeToNext: "FIXED", fixedDepart: "10:00", fixedArrive: "11:00" },
+      { id: "2", text: "B", modeToNext: "WALK" },
+    ];
+    const t = forwardSchedule([3600], buildRules(stops, base), base);
+    expect(t[0].depart).toEqual(new Date(2026, 10, 2, 10, 0));
+    expect(t[1].arrive).toEqual(new Date(2026, 10, 2, 11, 0));
   });
 });

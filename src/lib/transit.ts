@@ -94,11 +94,18 @@ export async function resolveEndpoint(s: Stop): Promise<string | null> {
   return found;
 }
 
+/**
+ * 日付・時刻は端末の時間帯ではなく日本時間(Asia/Tokyo、UTC+9・夏時間なし)で扱う。
+ * API の秒数は応答の日付(日本時間)の0時からの秒。
+ */
+const JST = 9 * 3600_000;
 const p2 = (n: number) => String(n).padStart(2, "0");
-const ymd = (d: Date) => `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}`;
-const hm = (d: Date) => `${p2(d.getHours())}:${p2(d.getMinutes())}`;
-/** "YYYYMMDD" の0時(端末の時間帯。日本での利用を想定) */
-const midnight = (s: string) => new Date(Number(s.slice(0, 4)), Number(s.slice(4, 6)) - 1, Number(s.slice(6, 8))).getTime();
+const jst = (d: Date) => new Date(d.getTime() + JST); // UTC の各値が日本時間の値になる
+const ymd = (d: Date) => { const j = jst(d); return `${j.getUTCFullYear()}${p2(j.getUTCMonth() + 1)}${p2(j.getUTCDate())}`; };
+/** 検索時刻は分単位に切り捨てて渡し(候補を取りこぼさない)、乗れるかは秒単位で判定する */
+const hm = (d: Date) => { const j = jst(d); return `${p2(j.getUTCHours())}:${p2(j.getUTCMinutes())}`; };
+/** "YYYYMMDD"(日本時間)の0時 */
+const midnight = (s: string) => Date.UTC(Number(s.slice(0, 4)), Number(s.slice(4, 6)) - 1, Number(s.slice(6, 8))) - JST;
 
 const usesShinkansen = (j: Journey) => j.legs.some((l) => l.kind === "transit" && /新幹線/.test(l.routeName ?? ""));
 
@@ -107,18 +114,24 @@ const usesShinkansen = (j: Journey) => j.legs.some((l) => l.kind === "transit" &
  * 所要は「出発可能時刻→到着」で、発車待ちを含む(時刻計算で二重に数えない)
  */
 export function journeyToLeg(plan: PlanResponse, ready: Date, shinkansen = false): LegResult {
+  const base = midnight(plan.date);
+  const at = (secs: number) => base + secs * 1000; // 24時以降の秒数は翌日になる
   const all = plan.journeys ?? [];
-  const usable = shinkansen ? all : all.filter((x) => !usesShinkansen(x));
+  // 出発可能時刻より前に歩き出す必要がある候補(=乗れない便)は除く
+  const reachable = all.filter((x) => at(x.departureSecs - (x.accessWalkSecs ?? 0)) >= ready.getTime());
+  const usable = shinkansen ? reachable : reachable.filter((x) => !usesShinkansen(x));
   const doorArrive = (x: Journey) => x.arrivalSecs + (x.egressWalkSecs ?? 0);
   const j = usable.reduce<Journey | undefined>((best, x) => (!best || doorArrive(x) < doorArrive(best) ? x : best), undefined);
   if (!j)
     return {
       ok: false,
       mode: "TRANSIT",
-      error: all.length ? "新幹線を使わない経路が見つかりませんでした(「🚄 新幹線も使う」をオンにすると候補に入ります)" : "公共交通の経路が見つかりませんでした",
+      error: !all.length
+        ? "公共交通の経路が見つかりませんでした"
+        : !reachable.length
+          ? "出発できる時刻より後に乗れる便が見つかりませんでした"
+          : "新幹線を使わない経路が見つかりませんでした(「🚄 新幹線も使う」をオンにすると候補に入ります)",
     };
-  const base = midnight(plan.date);
-  const at = (secs: number) => base + secs * 1000; // 24時以降の秒数は翌日になる
   // 出発地を出る時刻〜目的地に着く時刻(駅までの徒歩・駅からの徒歩を含める)
   const access = j.accessWalkSecs ?? 0;
   const egress = j.egressWalkSecs ?? 0;
@@ -152,7 +165,7 @@ export function journeyToLeg(plan: PlanResponse, ready: Date, shinkansen = false
     ok: true,
     mode: "TRANSIT",
     distanceMeters: distance,
-    durationSec: Math.max(60, Math.round((arriveAt - ready.getTime()) / 1000)),
+    durationSec: Math.round((arriveAt - ready.getTime()) / 1000),
     path: [],
     transit,
   };

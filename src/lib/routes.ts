@@ -1,6 +1,6 @@
 import type { LegResult, LatLng, Mode, Stop } from "../types";
 import { decodePolyline } from "./polyline";
-import { nextDepart, type StopRule } from "./schedule";
+import { firstDepart, nextDepart, type StopRule } from "./schedule";
 import { capMessage, take, type Sku } from "./quota";
 import { searchTransit } from "./transit";
 
@@ -120,8 +120,21 @@ export function fillFixedEnds(legs: LegResult[]): LegResult[] {
   });
 }
 
-export async function fetchLeg(apiKey: string, from: Stop, to: Stop, departure?: Date, opts: SearchOpts = {}): Promise<LegResult> {
+/** 時刻表で検索する区間か(前の区間の到着時刻が分からないと正しい便を選べない) */
+export const isTimetableLeg = (s: Stop, opts: SearchOpts) =>
+  !!opts.transitAuto && (s.modeToNext === "TRANSIT" || (s.modeToNext === "FIXED" && !s.fixedDepart && !s.fixedArrive));
+
+/**
+ * departure: 出発時刻。undefined は「いま」。timeUnknown は前の区間が取れず出発時刻が分からない状態で、
+ * このとき時刻表検索はせず(無関係な便を出さない)、手入力の所要があればそれを使う。
+ */
+export async function fetchLeg(apiKey: string, from: Stop, to: Stop, departure?: Date, opts: SearchOpts = {}, timeUnknown = false): Promise<LegResult> {
   const mode = from.modeToNext;
+  if (timeUnknown && isTimetableLeg(from, opts)) {
+    if (mode === "TRANSIT" && from.transitMin && from.transitMin > 0)
+      return { ok: true, mode, distanceMeters: 0, durationSec: from.transitMin * 60, path: [], manual: true };
+    return { ok: false, mode, error: "前の区間の到着時刻が分からないため、時刻表の検索を保留しました" };
+  }
   if (mode === "FIXED") {
     const fixed = fixedLeg(from);
     // 発着時刻が未入力なら、新幹線を含めて自動検索する(時刻を入れれば従来どおりその時刻で計算)
@@ -178,11 +191,13 @@ export async function searchAll(apiKey: string, stops: Stop[], opts: SearchOpts 
 /** 出発時刻つきで順番に取得(前の区間の到着+滞在が次の出発時刻になるため並列にできない) */
 export async function searchFrom(apiKey: string, stops: Stop[], start: Date, rules: StopRule[], opts: SearchOpts = {}): Promise<LegResult[]> {
   const out: LegResult[] = [];
-  let t: number | undefined = start.getTime();
+  let t: number | undefined = firstDepart(start, rules[0]);
   for (let i = 0; i < stops.length - 1; i++) {
-    const leg = await fetchLeg(apiKey, stops[i], stops[i + 1], t === undefined ? undefined : new Date(t), opts);
+    const leg = await fetchLeg(apiKey, stops[i], stops[i + 1], t === undefined ? undefined : new Date(t), opts, t === undefined);
     out.push(leg);
-    t = t === undefined || !leg.ok ? undefined : nextDepart(t + leg.durationSec * 1000, rules[i + 1]);
+    const r = rules[i + 1];
+    // 前の区間が不明でも、宿泊明けや時刻指定の便がある地点からは時刻を再開する
+    t = t !== undefined && leg.ok ? nextDepart(t + leg.durationSec * 1000, r) : r?.anchor ? r.departAt?.getTime() : undefined;
   }
   return fillFixedEnds(out);
 }

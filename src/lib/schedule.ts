@@ -8,6 +8,8 @@ export interface StopRule {
   departAt?: Date;
   /** この時刻までに着きたい(余裕・遅れの判定に使う) */
   arriveBy?: Date;
+  /** departAt が確定した時刻(宿泊明け・時刻指定の便)。前の区間が不明でもここから時刻を再開できる */
+  anchor?: boolean;
 }
 
 /** 地点ごとの到着・出発時刻。先頭は出発のみ、末尾は到着のみ */
@@ -35,14 +37,16 @@ export function nextDepart(arriveMs: number, r: StopRule | undefined): number {
  */
 export function forwardSchedule(durationsSec: (number | null)[], rules: StopRule[], start: Date): StopTime[] {
   const n = durationsSec.length + 1;
-  const out: StopTime[] = [{ depart: start, dwellMin: 0, waitMin: 0 }];
-  let t: number | undefined = start.getTime();
+  const first = firstDepart(start, rules[0]);
+  const out: StopTime[] = [{ depart: new Date(first), dwellMin: 0, waitMin: 0 }];
+  let t: number | undefined = first;
   for (let i = 1; i < n; i++) {
     const d = durationsSec[i - 1];
     const r = rules[i];
     const arrive: number | undefined = t === undefined || d === null ? undefined : t + d * 1000;
     const last = i === n - 1;
-    const depart: number | undefined = arrive === undefined || last ? undefined : nextDepart(arrive, r);
+    const depart: number | undefined =
+      last ? undefined : arrive !== undefined ? nextDepart(arrive, r) : r?.anchor ? r.departAt?.getTime() : undefined;
     const dwellMin = last ? 0 : r?.dwellMin ?? 0;
     out.push({
       arrive: arrive === undefined ? undefined : new Date(arrive),
@@ -54,6 +58,11 @@ export function forwardSchedule(durationsSec: (number | null)[], rules: StopRule
     t = depart;
   }
   return out;
+}
+
+/** 最初の地点を出る時刻: 先頭の区間が時刻指定の便なら、その発車時刻まで待つ */
+export function firstDepart(start: Date, r: StopRule | undefined): number {
+  return r?.departAt ? Math.max(start.getTime(), r.departAt.getTime()) : start.getTime();
 }
 
 /** 到着時刻から逆算した出発時刻(滞在のみ考慮)。所要が不明な区間があれば null */
@@ -88,15 +97,20 @@ export function buildRules(stops: Stop[], base: Date): StopRule[] {
       arriveBy: i > 0 ? resolveClock(s.arriveBy, day) : undefined,
     };
     if (mid && s.overnight) {
-      // 宿泊: 翌日の指定時刻(未指定は9:00)に出発。以降の "HH:MM" は翌日を基準にする
-      day = new Date(day.getTime() + 24 * 3600_000);
+      // 宿泊: 翌日(暦日)の指定時刻(未指定は9:00)に出発。以降の "HH:MM" は翌日を基準にする。
+      // 基準を翌日0時にするので、夜出発でも翌々日にずれない
+      day = new Date(day);
+      day.setDate(day.getDate() + 1);
+      day.setHours(0, 0, 0, 0);
       rule.dwellMin = 0;
       rule.departAt = resolveClock(s.departAt ?? DEFAULT_MORNING, day);
+      rule.anchor = true;
     }
     const train = s.modeToNext === "FIXED" && i < stops.length - 1 ? resolveClock(s.fixedDepart, day) : undefined;
     if (train) {
       // 新幹線・飛行機は発車時刻に出る(宿泊明けも、朝の出発時刻ではなく発車時刻)
       rule.departAt = train;
+      rule.anchor = true;
       // 滞在があるなら、滞在を終えてから乗れるように着く必要がある
       const by = new Date(train.getTime() - rule.dwellMin * MIN);
       if (i > 0 && !s.overnight && (!rule.arriveBy || by < rule.arriveBy)) rule.arriveBy = by;

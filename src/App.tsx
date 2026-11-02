@@ -298,19 +298,45 @@ export function App() {
 
     if (timeMode === "arrive" && valid) {
       rules[rules.length - 1].arriveBy = target;
-      // 1回目: 所要時間の概算 → 出発時刻を逆算 → 2回目: その時刻の渋滞・時刻表で取り直す
+      // 1回目: 所要時間の概算 → 出発時刻を逆算 → 2回目: その時刻の渋滞・時刻表で取り直す。
+      // 概算では公共交通の発車待ち(検索した瞬間の都合)を除いて見積もる
       const rough = await searchAll(apiKey, stops, opts);
-      const est = startForArrival(durations(rough), rules, target);
+      const est = startForArrival(
+        rough.map((l) => (l.ok ? l.durationSec - (l.transit?.waitSec ?? 0) : null)),
+        rules,
+        target,
+      );
       if (!est) {
         res = rough;
         msg = "取得できない区間があるため、到着時刻からの逆算はできませんでした。いま出発した場合の時刻です。";
       } else if (est < now) {
         res = rough;
         msg = "指定の到着時刻には間に合いません。いま出発した場合の時刻です。";
-      } else {
+      } else if (!hasAutoTransit) {
         res = await searchFrom(apiKey, stops, est, rules, opts);
         start = startForArrival(durations(res), rules, target) ?? est;
         msg = "到着時刻から逆算した目安です(到着指定は2回検索するため、リクエスト数は区間数×2)。";
+      } else {
+        // 時刻表の区間がある場合は、検索した便と予定表がずれないよう、出発時刻を動かすたびに検索し直す
+        const arrivalOf = (r: LegResult[], st: Date) => forwardSchedule(durations(r), rules, st).at(-1)?.arrive?.getTime();
+        start = est;
+        res = await searchFrom(apiKey, stops, start, rules, opts);
+        for (let k = 0; k < 2; k++) {
+          const arr = arrivalOf(res, start);
+          if (arr === undefined) break;
+          const diff = target.getTime() - arr; // プラス: 早く着きすぎ / マイナス: 遅れ
+          if (diff >= 0 && diff < 10 * 60_000) break;
+          const next = new Date(start.getTime() + diff);
+          if (next < now) break;
+          const res2 = await searchFrom(apiKey, stops, next, rules, opts);
+          const arr2 = arrivalOf(res2, next);
+          // 遅れているなら必ず早めた案に、早すぎるなら間に合う場合だけ遅らせた案に切り替える
+          if (diff < 0 || (arr2 !== undefined && arr2 <= target.getTime())) {
+            start = next;
+            res = res2;
+          } else break;
+        }
+        msg = "到着時刻に間に合う便を探した結果です(公共交通は時刻表の便に合わせて出発時刻を調整し、最大4回検索します)。";
       }
     } else if (timeMode === "depart" && valid && target.getTime() > now.getTime() + 60_000) {
       start = target;
