@@ -219,7 +219,9 @@ export function App() {
   const ready = stops.every((s) => s.text.trim());
   const opts = { tolls: car.tolls, transitAuto: car.transitAuto !== false };
   /** 公共交通を自動検索する区間があれば、前の区間の到着時刻から順に検索する(発車時刻を正しく拾うため) */
-  const hasAutoTransit = opts.transitAuto && stops.slice(0, -1).some((s) => s.modeToNext === "TRANSIT");
+  const hasAutoTransit =
+    opts.transitAuto &&
+    stops.slice(0, -1).some((s) => s.modeToNext === "TRANSIT" || (s.modeToNext === "FIXED" && !s.fixedDepart && !s.fixedArrive));
   /** 地点ごとの営業時間の警告(設定でオンのときだけ取得) */
   const [hoursWarn, setHoursWarn] = useState<(string | undefined)[]>([]);
   const [calEvents, setCalEvents] = useState<CalEvent[]>([]);
@@ -712,7 +714,7 @@ export function App() {
                     <div className="stop-opts fixed-opts">
                       <input
                         className="fixed-name"
-                        placeholder="便名(任意) 例: のぞみ12号"
+                        placeholder={opts.transitAuto ? "時刻が空なら自動検索。便名(任意)" : "便名(任意) 例: のぞみ12号"}
                         aria-label={`${label(i)}→${label(i + 1)}の便名`}
                         value={s.fixedName ?? ""}
                         onChange={(e) => update(i, { fixedName: e.target.value || undefined })}

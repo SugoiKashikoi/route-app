@@ -349,3 +349,18 @@ describe("新幹線のオン・オフ(モック)", () => {
     expect(journeyToLeg(only as never, new Date(2026, 10, 2, 9, 55), false)).toMatchObject({ ok: false });
   });
 });
+
+describe("新幹線・飛行機で時刻が空のとき", () => {
+  it("自動検索に回し、失敗したら時刻入力を促す(モック)", async () => {
+    const orig = globalThis.fetch;
+    globalThis.fetch = (() => Promise.reject(new TypeError("Load failed"))) as typeof fetch;
+    try {
+      const leg = await fetchLeg("", { id: "1", text: "岡山駅Y", modeToNext: "FIXED" }, { id: "2", text: "名古屋駅Y", modeToNext: "WALK" }, undefined, { transitAuto: true });
+      expect(leg).toMatchObject({ ok: false, mode: "FIXED" });
+      if (!leg.ok) expect(leg.error).toContain("発着時刻を入力");
+      expect(await fetchLeg("", { id: "1", text: "x", modeToNext: "FIXED", fixedDepart: "10:00", fixedArrive: "11:00" }, { id: "2", text: "y", modeToNext: "WALK" }, undefined, { transitAuto: true })).toMatchObject({ ok: true, durationSec: 3600 });
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+});

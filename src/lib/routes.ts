@@ -122,7 +122,15 @@ export function fillFixedEnds(legs: LegResult[]): LegResult[] {
 
 export async function fetchLeg(apiKey: string, from: Stop, to: Stop, departure?: Date, opts: SearchOpts = {}): Promise<LegResult> {
   const mode = from.modeToNext;
-  if (mode === "FIXED") return fixedLeg(from);
+  if (mode === "FIXED") {
+    const fixed = fixedLeg(from);
+    // 発着時刻が未入力なら、新幹線を含めて自動検索する(時刻を入れれば従来どおりその時刻で計算)
+    if (!fixed.ok && opts.transitAuto && !from.fixedDepart && !from.fixedArrive) {
+      const leg = await searchTransit({ ...from, shinkansen: true }, to, departure ?? new Date());
+      return leg.ok ? { ...leg, mode: "FIXED" } : { ...leg, mode: "FIXED", error: `${leg.error}。発着時刻を入力すればその時刻で計算します` };
+    }
+    return fixed;
+  }
   const manual = (): LegResult | undefined =>
     from.transitMin && from.transitMin > 0
       ? { ok: true, mode, distanceMeters: 0, durationSec: from.transitMin * 60, path: [], manual: true }
