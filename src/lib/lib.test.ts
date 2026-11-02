@@ -10,7 +10,7 @@ import { hoursWarning, isOpenAt, type Period } from "./hours";
 import { parseIcs, parseIcsDate } from "./ics";
 import { SKU, take } from "./quota";
 import { buildOptimizeRequest, fetchLeg } from "./routes";
-import { journeyToLeg, placeQueries } from "./transit";
+import { isShinkansen, journeyToLeg, placeQueries } from "./transit";
 import { decodeFavorite, encodeFavorite, toFavorite } from "./favorites";
 
 describe("favorites", () => {
@@ -422,5 +422,26 @@ describe("Codexレビューの指摘の再現テスト", () => {
     const t = forwardSchedule([3600], buildRules(stops, base), base);
     expect(t[0].depart).toEqual(new Date(2026, 10, 2, 10, 0));
     expect(t[1].arrive).toEqual(new Date(2026, 10, 2, 11, 0));
+  });
+});
+
+describe("新幹線の判定と手入力の固定", () => {
+  it("路線名が列車名だけでも新幹線と判定する", () => {
+    expect(isShinkansen("のぞみ のぞみ102号")).toBe(true);
+    expect(isShinkansen("北陸新幹線（下り（敦賀方面））")).toBe(true);
+    expect(isShinkansen("中央本線（上り）")).toBe(false);
+    expect(isShinkansen("ときわ路線バス")).toBe(false);
+  });
+  it("「手入力を使う」なら自動検索せず分数を使う", async () => {
+    const orig = globalThis.fetch;
+    let called = false;
+    globalThis.fetch = (() => { called = true; return Promise.reject(new Error("x")); }) as typeof fetch;
+    try {
+      const leg = await fetchLeg("", { id: "1", text: "名古屋駅", modeToNext: "TRANSIT", transitMin: 125, transitManual: true }, { id: "2", text: "松本駅", modeToNext: "WALK" }, undefined, { transitAuto: true });
+      expect(leg).toMatchObject({ ok: true, manual: true, durationSec: 7500 });
+      expect(called).toBe(false);
+    } finally {
+      globalThis.fetch = orig;
+    }
   });
 });

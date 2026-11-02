@@ -122,7 +122,8 @@ export function fillFixedEnds(legs: LegResult[]): LegResult[] {
 
 /** 時刻表で検索する区間か(前の区間の到着時刻が分からないと正しい便を選べない) */
 export const isTimetableLeg = (s: Stop, opts: SearchOpts) =>
-  !!opts.transitAuto && (s.modeToNext === "TRANSIT" || (s.modeToNext === "FIXED" && !s.fixedDepart && !s.fixedArrive));
+  !!opts.transitAuto &&
+  ((s.modeToNext === "TRANSIT" && !(s.transitManual && s.transitMin)) || (s.modeToNext === "FIXED" && !s.fixedDepart && !s.fixedArrive));
 
 /**
  * departure: 出発時刻。undefined は「いま」。timeUnknown は前の区間が取れず出発時刻が分からない状態で、
@@ -150,7 +151,8 @@ export async function fetchLeg(apiKey: string, from: Stop, to: Stop, departure?:
       : undefined;
   if (mode === "TRANSIT") {
     // 自動検索を優先し、失敗したら手入力の分数に戻す。日本の電車・バスは Google では取れない
-    if (opts.transitAuto) {
+    // 「手入力を使う」が選ばれ分数があれば、自動検索しない(データにない特急などで遠回りの結果になる区間向け)
+    if (opts.transitAuto && !(from.transitManual && manual())) {
       const leg = await searchTransit(from, to, departure ?? new Date());
       if (leg.ok) return leg;
       return manual() ?? leg;

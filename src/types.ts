@@ -29,6 +29,8 @@ export interface Stop {
   overnight?: boolean;
   /** modeToNext が TRANSIT のとき、所要(分)を手入力(APIを使わない。日本の電車はAPIで取れないため) */
   transitMin?: number;
+  /** modeToNext が TRANSIT のとき、自動検索せず手入力の所要(transitMin)を使う */
+  transitManual?: boolean;
   /** modeToNext が TRANSIT のとき、新幹線を使う経路も候補にする(既定は使わない) */
   shinkansen?: boolean;
   /** 地名の代わりに座標で指定(現在地からの再計算で使う) */

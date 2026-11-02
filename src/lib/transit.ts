@@ -107,7 +107,12 @@ const hm = (d: Date) => { const j = jst(d); return `${p2(j.getUTCHours())}:${p2(
 /** "YYYYMMDD"(日本時間)の0時 */
 const midnight = (s: string) => Date.UTC(Number(s.slice(0, 4)), Number(s.slice(4, 6)) - 1, Number(s.slice(6, 8))) - JST;
 
-const usesShinkansen = (j: Journey) => j.legs.some((l) => l.kind === "transit" && /新幹線/.test(l.routeName ?? ""));
+/**
+ * 新幹線の判定。実応答では路線名が「のぞみ のぞみ102号」のように列車名だけのことがあるため、列車名でも判定する
+ */
+const SHINKANSEN = /新幹線|^(のぞみ|ひかり|こだま|さくら|みずほ|つばめ|はやぶさ|はやて|やまびこ|なすの|つばさ|こまち|とき|たにがわ|かがやき|はくたか|あさま|つるぎ|かもめ)(\s|\d|号|$)/;
+export const isShinkansen = (routeName: string | undefined) => SHINKANSEN.test((routeName ?? "").trim());
+const usesShinkansen = (j: Journey) => j.legs.some((l) => l.kind === "transit" && isShinkansen(l.routeName));
 
 /**
  * API の結果を区間結果に変換。候補のうち最も早く着くものを選ぶ(新幹線を使わない設定なら新幹線を含む候補を除く)。

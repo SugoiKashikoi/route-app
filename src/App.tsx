@@ -709,7 +709,7 @@ export function App() {
                   {!last && s.modeToNext === "TRANSIT" && (
                     <div className="stop-opts fixed-opts">
                       <label className="mini">
-                        {opts.transitAuto ? "自動検索できないときの所要" : "所要"}
+                        {opts.transitAuto && !s.transitManual ? "自動検索できないときの所要" : "所要"}
                         <input
                           type="number"
                           inputMode="numeric"
@@ -729,6 +729,17 @@ export function App() {
                           onClick={() => update(i, { shinkansen: !s.shinkansen || undefined })}
                         >
                           🚄 新幹線も使う
+                        </button>
+                      )}
+                      {opts.transitAuto && (
+                        <button
+                          className={`mini-btn ${s.transitManual ? "on" : ""}`}
+                          aria-pressed={!!s.transitManual}
+                          aria-label={`${label(i)}→${label(i + 1)}は手入力の所要を使う`}
+                          title="自動検索の結果が遠回りなどでおかしいとき、入力した分数で計算します"
+                          onClick={() => update(i, { transitManual: !s.transitManual || undefined })}
+                        >
+                          📝 手入力を使う
                         </button>
                       )}
                       <a className="mini-link" href={legUrlByName(s.text || "現在地", stops[i + 1]?.text ?? "", "TRANSIT")} target="_blank" rel="noreferrer">
