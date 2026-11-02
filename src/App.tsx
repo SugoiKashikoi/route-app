@@ -408,6 +408,7 @@ export function App() {
     const h = hoursWarn[i + 1];
     // 公共交通のデータ範囲の注意があれば、遠回りの可能性として知らせる
     if (l.ok && l.transit?.notices.length) c.push("時刻表データの範囲外の可能性(遠回りなら「📝 手入力を使う」)");
+    if (l.ok && l.transit?.detour) c.push(`${l.transit.detour}。実際の経路を確かめ、違えば「📝 手入力を使う」で所要を入力してください`);
     return h ? [...c, `${label(i + 1)}: ${h}`] : c;
   });
   const tollLegs = okLegs.filter((l) => l.tollYen !== undefined || l.tollUnknown);

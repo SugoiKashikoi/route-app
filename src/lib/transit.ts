@@ -56,6 +56,8 @@ export interface TransitDetails {
   fareYen?: number;
   fareIcYen?: number;
   segments: { kind: "walk" | "transit"; name: string; from: string; to: string; departAt: number; arriveAt: number }[];
+  /** 遠回りの疑い(あれば理由の文) */
+  detour?: string;
   /** API が返したデータ範囲の注意(特急などのデータがなく遠回りになっている可能性の手がかり) */
   notices: string[];
 }
@@ -95,18 +97,50 @@ export async function suggestStations(q: string): Promise<{ endpoint: string; na
 }
 
 const endpointCache = new Map<string, string | null>();
+/** endpoint ごとの座標(遠回りの判定に使う) */
+const coordCache = new Map<string, { lat: number; lng: number }>();
+
+/** endpoint の座標。"geo:緯度,経度" はそのまま、駅は地点検索で得た座標 */
+export function endpointCoord(endpoint: string): { lat: number; lng: number } | undefined {
+  const m = endpoint.match(/^geo:(-?[\d.]+),(-?[\d.]+)$/);
+  return m ? { lat: Number(m[1]), lng: Number(m[2]) } : coordCache.get(endpoint);
+}
+
+/** 2点間の直線距離(km) */
+export function straightKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const rad = Math.PI / 180;
+  const h =
+    Math.sin(((b.lat - a.lat) * rad) / 2) ** 2 +
+    Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(((b.lng - a.lng) * rad) / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(h));
+}
+
+/**
+ * 遠回りの疑い。API のデータが欠けていると、直通の特急がなく大回りの経路が返ることがある(実例: 名古屋→松本が東京回り)。
+ * 直線50km以上で、乗車〜到着の平均速度(直線距離÷時間)が時速30km未満なら疑う。待ち時間は含めない
+ */
+export function detourNote(km: number, moveSec: number): string | undefined {
+  if (km < 50 || moveSec <= 0) return undefined;
+  const kmh = km / (moveSec / 3600);
+  return kmh < 30 ? `直線${Math.round(km)}kmに${Math.floor(moveSec / 3600)}時間${Math.round((moveSec % 3600) / 60)}分かかる経路です。遠回りの可能性があります` : undefined;
+}
 
 /** 地点を Transit API の endpoint("geo:緯度,経度" や駅ID)に変換。見つからなければ null */
 export async function resolveEndpoint(s: Stop): Promise<string | null> {
   // 候補から駅を選んだ地点は、その駅で検索する(住所から探すより正確)
-  if (s.transitEndpoint) return s.transitEndpoint;
+  if (s.transitEndpoint) {
+    if (s.latLng) coordCache.set(s.transitEndpoint, s.latLng);
+    return s.transitEndpoint;
+  }
   if (s.latLng) return `geo:${s.latLng.lat},${s.latLng.lng}`;
   const key = s.text.trim();
   if (endpointCache.has(key)) return endpointCache.get(key)!;
   let found: string | null = null;
   for (const q of placeQueries(key)) {
-    const res = await getJSON<{ places?: { endpoint: string }[] }>("/api/v1/places/suggest", { q, limit: "1" });
-    found = res.places?.[0]?.endpoint ?? null;
+    const res = await getJSON<{ places?: { endpoint: string; lat?: number; lon?: number }[] }>("/api/v1/places/suggest", { q, limit: "1" });
+    const p = res.places?.[0];
+    found = p?.endpoint ?? null;
+    if (p && found && p.lat !== undefined && p.lon !== undefined) coordCache.set(found, { lat: p.lat, lng: p.lon });
     if (found) break;
   }
   endpointCache.set(key, found);
@@ -207,11 +241,14 @@ export async function searchTransit(from: Stop, to: Stop, ready: Date): Promise<
       date: ymd(ready),
       time: hm(ready),
       type: "departure",
-      strategy: "fastest",
       // 新幹線あり/なしの両方から選べるよう、候補を多めに取る(上限6)
       numItineraries: "6",
     });
-    return journeyToLeg(plan, ready, !!from.shinkansen);
+    const leg = journeyToLeg(plan, ready, !!from.shinkansen);
+    const ca = endpointCoord(a);
+    const cb = endpointCoord(b);
+    if (leg.ok && leg.transit && ca && cb) leg.transit.detour = detourNote(straightKm(ca, cb), (leg.transit.arriveAt - leg.transit.departAt) / 1000);
+    return leg;
   } catch (e) {
     return { ok: false, mode: "TRANSIT", error: `公共交通を自動検索できませんでした(${e instanceof Error ? e.message : String(e)})` };
   }

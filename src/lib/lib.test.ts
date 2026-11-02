@@ -10,7 +10,7 @@ import { hoursWarning, isOpenAt, type Period } from "./hours";
 import { parseIcs, parseIcsDate } from "./ics";
 import { SKU, take } from "./quota";
 import { buildOptimizeRequest, fetchLeg } from "./routes";
-import { isShinkansen, journeyToLeg, placeQueries } from "./transit";
+import { detourNote, endpointCoord, isShinkansen, journeyToLeg, placeQueries, straightKm } from "./transit";
 import { decodeFavorite, encodeFavorite, toFavorite } from "./favorites";
 
 describe("favorites", () => {
@@ -443,5 +443,19 @@ describe("新幹線の判定と手入力の固定", () => {
     } finally {
       globalThis.fetch = orig;
     }
+  });
+});
+
+describe("遠回りの判定", () => {
+  it("名古屋→松本(直線約135km)が5時間半なら疑う。しなの約2時間なら疑わない", () => {
+    const km = straightKm({ lat: 35.1709, lng: 136.8815 }, { lat: 36.2307, lng: 137.9649 });
+    expect(km).toBeGreaterThan(120);
+    expect(km).toBeLessThan(160);
+    expect(detourNote(km, 5.5 * 3600)).toMatch(/遠回り/);
+    expect(detourNote(km, 2 * 3600)).toBeUndefined();
+    expect(detourNote(20, 3 * 3600)).toBeUndefined(); // 近距離は判定しない
+  });
+  it("geo: の座標を読み取る", () => {
+    expect(endpointCoord("geo:34.6661,133.9177")).toEqual({ lat: 34.6661, lng: 133.9177 });
   });
 });
