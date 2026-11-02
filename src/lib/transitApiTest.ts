@@ -22,7 +22,7 @@ function shape(v: unknown, depth = 0): unknown {
 async function get(path: string): Promise<string> {
   const t0 = performance.now();
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), 20_000);
+  const timer = setTimeout(() => ctl.abort(), 45_000);
   try {
     const r = await fetch(BASE + path, { signal: ctl.signal });
     const ms = Math.round(performance.now() - t0);

@@ -6,7 +6,8 @@ import type { LegResult, Stop } from "../types";
  * 地点は Transit API 自身の地点検索で解決し、Google 由来の座標は渡さない(現在地の座標は端末のもの)。
  */
 const BASE = "https://api.transit.ls8h.com";
-const TIMEOUT_MS = 20_000;
+// 東京など路線の多い地域は検索に20秒以上かかることがある(実機テストで東京駅→渋谷駅が20秒で打ち切り)
+const TIMEOUT_MS = 45_000;
 
 export const TRANSIT_ATTRIBUTION = "公共交通は Transit API(各事業者の公開データ)を利用しています。実際の運行と異なる場合があります。";
 
