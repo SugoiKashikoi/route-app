@@ -310,6 +310,15 @@ describe("公共交通の自動検索(Transit API。モックのみ、実通信�
     if (!leg.ok || !leg.transit) throw new Error("no transit");
     expect(new Date(leg.transit.departAt).getDate()).toBe(3);
   });
+  it("駅までと駅からの徒歩(access/egress)を所要と時刻に含める", () => {
+    const p = { date: "20261102", journeys: [{ ...plan.journeys[0], departureSecs: 36000, arrivalSecs: 37000, accessWalkSecs: 120, egressWalkSecs: 60, legs: [plan.journeys[0].legs[1]] }] };
+    const ready = new Date(2026, 10, 2, 9, 50);
+    const leg = journeyToLeg(p as never, ready);
+    if (!leg.ok || !leg.transit) throw new Error("no transit");
+    expect(leg.durationSec).toBe(37060 - 35400);
+    expect(leg.transit.waitSec).toBe(36000 - 120 - 35400);
+    expect(leg.transit.segments.map((g) => g.kind)).toEqual(["walk", "transit", "walk"]);
+  });
   it("住所つきの地点名から検索語を作る", () => {
     expect(placeQueries("日本、〒700-0024 岡山県岡山市北区駅元町1-1 岡山駅")).toEqual(["岡山県岡山市北区駅元町1-1 岡山駅", "岡山駅"]);
   });

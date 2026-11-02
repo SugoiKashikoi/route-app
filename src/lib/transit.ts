@@ -32,6 +32,9 @@ interface Journey {
   durationSecs: number;
   transferCount: number;
   fare?: { currency: string; ticket: number; ic?: number };
+  /** 乗車区間の前後の徒歩(秒)。departureSecs〜arrivalSecs には含まれない(実応答で確認) */
+  accessWalkSecs?: number;
+  egressWalkSecs?: number;
   legs: ApiLeg[];
 }
 interface PlanResponse {
@@ -106,7 +109,8 @@ const usesShinkansen = (j: Journey) => j.legs.some((l) => l.kind === "transit" &
 export function journeyToLeg(plan: PlanResponse, ready: Date, shinkansen = false): LegResult {
   const all = plan.journeys ?? [];
   const usable = shinkansen ? all : all.filter((x) => !usesShinkansen(x));
-  const j = usable.reduce<Journey | undefined>((best, x) => (!best || x.arrivalSecs < best.arrivalSecs ? x : best), undefined);
+  const doorArrive = (x: Journey) => x.arrivalSecs + (x.egressWalkSecs ?? 0);
+  const j = usable.reduce<Journey | undefined>((best, x) => (!best || doorArrive(x) < doorArrive(best) ? x : best), undefined);
   if (!j)
     return {
       ok: false,
@@ -115,8 +119,13 @@ export function journeyToLeg(plan: PlanResponse, ready: Date, shinkansen = false
     };
   const base = midnight(plan.date);
   const at = (secs: number) => base + secs * 1000; // 24時以降の秒数は翌日になる
-  const departAt = at(j.departureSecs);
-  const arriveAt = at(j.arrivalSecs);
+  // 出発地を出る時刻〜目的地に着く時刻(駅までの徒歩・駅からの徒歩を含める)
+  const access = j.accessWalkSecs ?? 0;
+  const egress = j.egressWalkSecs ?? 0;
+  const departAt = at(j.departureSecs - access);
+  const arriveAt = at(j.arrivalSecs + egress);
+  const walk = (name: string, from: string, to: string, a: number, b: number) =>
+    ({ kind: "walk" as const, name, from, to, departAt: at(a), arriveAt: at(b) });
   const transit: TransitDetails = {
     provider: "transitApi",
     departAt,
@@ -125,14 +134,18 @@ export function journeyToLeg(plan: PlanResponse, ready: Date, shinkansen = false
     transferCount: j.transferCount,
     fareYen: j.fare?.currency === "JPY" ? j.fare.ticket : undefined,
     fareIcYen: j.fare?.currency === "JPY" ? j.fare.ic : undefined,
-    segments: j.legs.map((l) => ({
-      kind: l.kind,
-      name: l.kind === "walk" ? "徒歩" : [l.routeName, l.headsign && `${l.headsign}行`].filter(Boolean).join(" "),
-      from: l.from.name,
-      to: l.to.name,
-      departAt: at(l.departureSecs),
-      arriveAt: at(l.arrivalSecs),
-    })),
+    segments: [
+      ...(access > 0 ? [walk("徒歩", "出発地", j.legs[0]?.from.name ?? "駅", j.departureSecs - access, j.departureSecs)] : []),
+      ...j.legs.map((l) => ({
+        kind: l.kind,
+        name: l.kind === "walk" ? "徒歩" : [l.routeName, l.headsign && `${l.headsign}行`].filter(Boolean).join(" "),
+        from: l.from.name,
+        to: l.to.name,
+        departAt: at(l.departureSecs),
+        arriveAt: at(l.arrivalSecs),
+      })),
+      ...(egress > 0 ? [walk("徒歩", j.legs.at(-1)?.to.name ?? "駅", "目的地", j.arrivalSecs, j.arrivalSecs + egress)] : []),
+    ],
   };
   const distance = j.legs.reduce((a, l) => a + (l.distanceMeters ?? 0), 0);
   return {
