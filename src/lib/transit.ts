@@ -36,6 +36,8 @@ interface Journey {
   accessWalkSecs?: number;
   egressWalkSecs?: number;
   legs: ApiLeg[];
+  /** データの対象範囲についての注意(例: 読み込まれたデータの範囲外) */
+  coverage?: { notices?: { severity: string; message: string }[] };
 }
 interface PlanResponse {
   date: string;
@@ -54,6 +56,8 @@ export interface TransitDetails {
   fareYen?: number;
   fareIcYen?: number;
   segments: { kind: "walk" | "transit"; name: string; from: string; to: string; departAt: number; arriveAt: number }[];
+  /** API が返したデータ範囲の注意(特急などのデータがなく遠回りになっている可能性の手がかり) */
+  notices: string[];
 }
 
 async function getJSON<T>(path: string, params: Record<string, string | undefined>): Promise<T> {
@@ -167,6 +171,7 @@ export function journeyToLeg(plan: PlanResponse, ready: Date, shinkansen = false
     transferCount: j.transferCount,
     fareYen: j.fare?.currency === "JPY" ? j.fare.ticket : undefined,
     fareIcYen: j.fare?.currency === "JPY" ? j.fare.ic : undefined,
+    notices: (j.coverage?.notices ?? []).filter((n) => n.severity === "warning").map((n) => n.message),
     segments: [
       ...(access > 0 ? [walk("徒歩", "出発地", j.legs[0]?.from.name ?? "駅", j.departureSecs - access, j.departureSecs)] : []),
       ...j.legs.map((l) => ({

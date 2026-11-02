@@ -406,6 +406,8 @@ export function App() {
   const cautions = legs.map((l, i) => {
     const c = legCautions(l, schedule[i + 1]?.slackMin, stops[i + 1]?.modeToNext === "FIXED" && i + 1 < stops.length - 1);
     const h = hoursWarn[i + 1];
+    // 公共交通のデータ範囲の注意があれば、遠回りの可能性として知らせる
+    if (l.ok && l.transit?.notices.length) c.push("時刻表データの範囲外の可能性(遠回りなら「📝 手入力を使う」)");
     return h ? [...c, `${label(i + 1)}: ${h}`] : c;
   });
   const tollLegs = okLegs.filter((l) => l.tollYen !== undefined || l.tollUnknown);
@@ -915,6 +917,9 @@ export function App() {
                                 </li>
                               ))}
                             </ol>
+                            {l.transit.notices.map((n) => (
+                              <p key={n} className="note warn-note">⚠ {n}</p>
+                            ))}
                             <p className="note">
                               時刻表に基づく検索結果(Transit API)。
                               {l.transit.fareIcYen !== undefined && `IC運賃 ¥${l.transit.fareIcYen.toLocaleString()}。`}
