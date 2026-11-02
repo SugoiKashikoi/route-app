@@ -366,7 +366,7 @@ export function App() {
         navigator.geolocation.getCurrentPosition(ok, ng, { enableHighAccuracy: true, timeout: 15_000 }),
       );
       const now = new Date();
-      const here: Stop = { ...stops[step], text: "現在地", placeId: undefined, latLng: { lat: pos.coords.latitude, lng: pos.coords.longitude }, dwellMin: 0, departAt: undefined, overnight: undefined };
+      const here: Stop = { ...stops[step], text: "現在地", placeId: undefined, transitEndpoint: undefined, latLng: { lat: pos.coords.latitude, lng: pos.coords.longitude }, dwellMin: 0, departAt: undefined, overnight: undefined };
       const rest = [here, ...stops.slice(step + 1)];
       const rules = buildRules(rest, now);
       const res = await searchFrom(apiKey, rest, now, rules, opts);
@@ -620,7 +620,7 @@ export function App() {
                         value={s.text}
                         placeholder={first ? "出発地" : last ? "目的地" : "経由地"}
                         label={`地点${label(i)} ${first ? "出発地" : last ? "目的地" : "経由地"}`}
-                        onChange={(text, placeId) => update(i, { text, placeId })}
+                        onChange={(text, p) => update(i, { text, placeId: p?.placeId, latLng: p?.latLng, transitEndpoint: p?.transitEndpoint })}
                       />
                       {!first && (
                         <div className="stop-opts">

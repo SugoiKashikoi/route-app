@@ -77,10 +77,25 @@ export function placeQueries(text: string): string[] {
   return [...new Set([t, last])].filter((q) => q.length >= 2);
 }
 
+/** 駅の候補(入力欄の候補表示用)。失敗しても空で返す */
+export async function suggestStations(q: string): Promise<{ endpoint: string; name: string; lat: number; lon: number }[]> {
+  try {
+    const res = await getJSON<{ places?: { endpoint: string; name: string; kind: string; lat: number; lon: number }[] }>(
+      "/api/v1/places/suggest",
+      { q: q.trim(), limit: "6" },
+    );
+    return (res.places ?? []).filter((p) => p.kind === "station").slice(0, 4);
+  } catch {
+    return [];
+  }
+}
+
 const endpointCache = new Map<string, string | null>();
 
 /** 地点を Transit API の endpoint("geo:緯度,経度" や駅ID)に変換。見つからなければ null */
 export async function resolveEndpoint(s: Stop): Promise<string | null> {
+  // 候補から駅を選んだ地点は、その駅で検索する(住所から探すより正確)
+  if (s.transitEndpoint) return s.transitEndpoint;
   if (s.latLng) return `geo:${s.latLng.lat},${s.latLng.lng}`;
   const key = s.text.trim();
   if (endpointCache.has(key)) return endpointCache.get(key)!;
@@ -187,6 +202,7 @@ export async function searchTransit(from: Stop, to: Stop, ready: Date): Promise<
       date: ymd(ready),
       time: hm(ready),
       type: "departure",
+      strategy: "fastest",
       // 新幹線あり/なしの両方から選べるよう、候補を多めに取る(上限6)
       numItineraries: "6",
     });

@@ -33,6 +33,8 @@ export interface Stop {
   transitManual?: boolean;
   /** modeToNext が TRANSIT のとき、新幹線を使う経路も候補にする(既定は使わない) */
   shinkansen?: boolean;
+  /** 公共交通検索(Transit API)で使う駅の指定。入力欄の候補から駅を選んだとき */
+  transitEndpoint?: string;
   /** 地名の代わりに座標で指定(現在地からの再計算で使う) */
   latLng?: LatLng;
   /** modeToNext が FIXED のときの便名(例: のぞみ12号) */
